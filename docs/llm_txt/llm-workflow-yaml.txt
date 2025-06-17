@@ -1,0 +1,684 @@
+# Kestra Workflow YAML Documentation for LLM
+
+## Overview
+Kestra is an event-driven orchestration platform that uses declarative YAML to define workflows. This documentation provides comprehensive coverage of workflow syntax, task types, and examples optimized for LLM understanding.
+
+## Core Workflow Structure
+
+### Basic Workflow Anatomy
+```yaml
+id: workflow-name                    # Unique identifier for the workflow
+namespace: organization.project      # Namespace for organization/grouping
+
+description: "Workflow description"  # Optional: Human-readable description
+
+inputs:                             # Optional: Define input parameters
+  - id: input_name
+    type: STRING|INT|FLOAT|BOOLEAN|JSON|DATETIME|FILE|SECRET
+    description: "Parameter description"
+    defaults: "default_value"        # Optional default value
+
+labels:                             # Optional: Metadata labels
+  environment: "production"
+  team: "data-engineering"
+
+tasks:                              # Required: List of tasks to execute
+  - id: task-name
+    type: task.type.here
+    # task-specific properties
+
+triggers:                           # Optional: Event triggers
+  - id: trigger-name
+    type: trigger.type.here
+    # trigger-specific properties
+
+listeners:                          # Optional: Event listeners
+  - conditions:
+      - type: condition.type.here
+    tasks:
+      - id: listener-task
+        type: task.type.here
+
+errors:                            # Optional: Global error handling
+  - id: error-handler
+    type: task.type.here
+
+pluginDefaults:                    # Optional: Default plugin configurations
+  - type: plugin.type.here
+    values:
+      property: "value"
+```
+
+## Task Types Documentation
+
+### Flow Control Tasks
+
+#### Sequential Execution
+```yaml
+- id: sequential-tasks
+  type: io.kestra.plugin.core.flow.Sequential
+  tasks:
+    - id: first-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Step 1"
+    - id: second-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Step 2"
+```
+
+#### Parallel Execution
+```yaml
+- id: parallel-tasks
+  type: io.kestra.plugin.core.flow.Parallel
+  tasks:
+    - id: parallel-task-1
+      type: io.kestra.plugin.core.debug.Return
+      format: "Parallel Task 1"
+    - id: parallel-task-2
+      type: io.kestra.plugin.core.debug.Return
+      format: "Parallel Task 2"
+```
+
+#### ForEach Loop
+```yaml
+- id: foreach-loop
+  type: io.kestra.plugin.core.flow.ForEach
+  values: '["item1", "item2", "item3"]'      # Can be JSON array or expression
+  tasks:
+    - id: process-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Processing: {{taskrun.value}}"
+```
+
+#### EachSequential (Sequential ForEach)
+```yaml
+- id: each-sequential
+  type: io.kestra.plugin.core.flow.EachSequential
+  value: '{{inputs.items}}'
+  tasks:
+    - id: sequential-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Item: {{taskrun.value}}"
+```
+
+#### EachParallel (Parallel ForEach)
+```yaml
+- id: each-parallel
+  type: io.kestra.plugin.core.flow.EachParallel
+  value: '{{inputs.items}}'
+  tasks:
+    - id: parallel-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Item: {{taskrun.value}}"
+```
+
+#### Switch (Conditional Branching)
+```yaml
+- id: switch-case
+  type: io.kestra.plugin.core.flow.Switch
+  value: "{{inputs.environment}}"
+  cases:
+    production:
+      - id: prod-task
+        type: io.kestra.plugin.core.debug.Return
+        format: "Production environment"
+    staging:
+      - id: staging-task
+        type: io.kestra.plugin.core.debug.Return
+        format: "Staging environment"
+  defaults:                                   # Optional: default case
+    - id: default-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Unknown environment"
+```
+
+#### If Conditional
+```yaml
+- id: if-condition
+  type: io.kestra.plugin.core.flow.If
+  condition: "{{inputs.enabled == true}}"
+  then:
+    - id: enabled-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Feature is enabled"
+  else:                                       # Optional
+    - id: disabled-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Feature is disabled"
+```
+
+#### Subflow
+```yaml
+- id: call-subflow
+  type: io.kestra.plugin.core.flow.Subflow
+  namespace: io.kestra.subflows
+  flowId: helper-workflow
+  inputs:
+    parameter1: "value1"
+    parameter2: "{{outputs.previous-task.value}}"
+```
+
+### Utility Tasks
+
+#### Debug Return
+```yaml
+- id: debug-output
+  type: io.kestra.plugin.core.debug.Return
+  format: "Task completed at {{taskrun.startDate}}"
+```
+
+#### Log Message
+```yaml
+- id: log-message
+  type: io.kestra.plugin.core.log.Log
+  message: "Processing item: {{taskrun.value}}"
+  level: INFO                                 # DEBUG, INFO, WARN, ERROR
+```
+
+#### Sleep/Delay
+```yaml
+- id: wait-task
+  type: io.kestra.plugin.core.flow.Sleep
+  duration: "PT30S"                          # ISO 8601 duration format
+```
+
+#### Pause (Manual Resume)
+```yaml
+- id: manual-approval
+  type: io.kestra.plugin.core.flow.Pause
+  timeout: "PT1H"                           # Optional timeout
+  onTimeout:
+    - id: timeout-handler
+      type: io.kestra.plugin.core.debug.Return
+      format: "Approval timed out"
+```
+
+### Error Handling Tasks
+
+#### Execution Fail
+```yaml
+- id: force-failure
+  type: io.kestra.plugin.core.execution.Fail
+  message: "Workflow failed due to business logic"
+```
+
+#### Allow Failure
+```yaml
+- id: optional-task
+  type: io.kestra.plugin.core.flow.AllowFailure
+  tasks:
+    - id: might-fail
+      type: io.kestra.plugin.core.execution.Fail
+      message: "This failure is allowed"
+```
+
+### Templating Tasks
+
+#### Templated Task
+```yaml
+- id: templated-task
+  type: io.kestra.plugin.core.templating.TemplatedTask
+  spec: |
+    id: dynamic-task-{{inputs.suffix}}
+    type: io.kestra.plugin.core.debug.Return
+    format: "Dynamic task: {{inputs.value}}"
+```
+
+### State Management
+
+#### Set State
+```yaml
+- id: set-state
+  type: io.kestra.plugin.core.state.Set
+  name: "workflow_status"
+  value: "processing"
+```
+
+#### Get State
+```yaml
+- id: get-state
+  type: io.kestra.plugin.core.state.Get
+  name: "workflow_status"
+```
+
+### Working Directory
+
+#### Working Directory Context
+```yaml
+- id: working-directory
+  type: io.kestra.plugin.core.flow.WorkingDirectory
+  tasks:
+    - id: create-file
+      type: io.kestra.plugin.core.debug.Return
+      format: "File operations in shared directory"
+```
+
+## Triggers
+
+### Schedule Trigger
+```yaml
+triggers:
+  - id: schedule-trigger
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 0 * * *"                        # Daily at midnight
+    timezone: "UTC"
+    inputs:
+      environment: "production"
+```
+
+### Webhook Trigger
+```yaml
+triggers:
+  - id: webhook-trigger
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: "webhook-key"                        # Unique webhook identifier
+```
+
+## Conditions
+
+### Execution Status Condition
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in:
+          - FAILED
+          - SUCCESS
+    tasks:
+      - id: status-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution status: {{execution.state.current}}"
+```
+
+### Expression Condition
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExpressionCondition
+        expression: "{{outputs.task1.value > 100}}"
+    tasks:
+      - id: condition-met
+        type: io.kestra.plugin.core.debug.Return
+        format: "Condition satisfied"
+```
+
+## Expression Language
+
+Kestra uses a Pebble-based expression language for dynamic values:
+
+### Common Expressions
+- `{{inputs.parameter_name}}` - Access input parameters
+- `{{outputs.task_id.property}}` - Access task outputs
+- `{{taskrun.value}}` - Current iteration value in loops
+- `{{taskrun.startDate}}` - Task start timestamp
+- `{{execution.id}}` - Current execution ID
+- `{{flow.id}}` - Current flow ID
+- `{{flow.namespace}}` - Current flow namespace
+
+### Functions
+- `{{read('file.txt')}}` - Read namespace file
+- `{{secret('SECRET_NAME')}}` - Access secret values
+- `{{now()}}` - Current timestamp
+- `{{random()}}` - Random value generation
+
+## Mermaid Flow Diagram
+
+```mermaid
+graph TD
+    A[Workflow Start] --> B{Has Triggers?}
+    B -->|Yes| C[Trigger Activation]
+    B -->|No| D[Manual Execution]
+    C --> E[Input Validation]
+    D --> E
+    E --> F{Input Valid?}
+    F -->|No| G[Input Error]
+    F -->|Yes| H[Task Execution]
+    
+    H --> I{Task Type}
+    I -->|Sequential| J[Sequential Flow]
+    I -->|Parallel| K[Parallel Flow]
+    I -->|ForEach| L[Loop Flow]
+    I -->|Switch| M[Conditional Flow]
+    I -->|If| N[Boolean Flow]
+    I -->|Simple| O[Direct Execution]
+    
+    J --> P[Execute Tasks in Order]
+    K --> Q[Execute Tasks Concurrently]
+    L --> R[Iterate Over Values]
+    M --> S[Evaluate Cases]
+    N --> T[Evaluate Condition]
+    O --> U[Execute Single Task]
+    
+    P --> V{Task Success?}
+    Q --> V
+    R --> V
+    S --> V
+    T --> V
+    U --> V
+    
+    V -->|Success| W[Next Task/Complete]
+    V -->|Failure| X{Error Handler?}
+    
+    X -->|Yes| Y[Execute Error Tasks]
+    X -->|No| Z[Workflow Failed]
+    
+    Y --> AA{Error Resolved?}
+    AA -->|Yes| W
+    AA -->|No| Z
+    
+    W --> BB{More Tasks?}
+    BB -->|Yes| H
+    BB -->|No| CC[Workflow Success]
+    
+    G --> DD[Workflow Error]
+    Z --> DD
+    CC --> EE[Listeners Execution]
+    DD --> EE
+    EE --> FF[Workflow End]
+```
+
+## Complete Examples
+
+### Example 1: Basic Data Processing Pipeline
+```yaml
+id: data-processing-pipeline
+namespace: data.engineering
+
+description: "Basic data processing workflow with error handling"
+
+inputs:
+  - id: source_file
+    type: STRING
+    description: "Path to source data file"
+  - id: batch_size
+    type: INT
+    defaults: 1000
+    description: "Number of records to process per batch"
+
+tasks:
+  - id: validate-input
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{inputs.source_file != null}}"
+    then:
+      - id: log-start
+        type: io.kestra.plugin.core.log.Log
+        message: "Starting processing of {{inputs.source_file}}"
+    else:
+      - id: fail-validation
+        type: io.kestra.plugin.core.execution.Fail
+        message: "Source file path is required"
+
+  - id: process-data
+    type: io.kestra.plugin.core.flow.Sequential
+    tasks:
+      - id: extract-data
+        type: io.kestra.plugin.core.debug.Return
+        format: "Extracting data from {{inputs.source_file}}"
+      
+      - id: transform-data
+        type: io.kestra.plugin.core.debug.Return
+        format: "Transforming data with batch size {{inputs.batch_size}}"
+      
+      - id: load-data
+        type: io.kestra.plugin.core.debug.Return
+        format: "Loading processed data"
+
+  - id: cleanup
+    type: io.kestra.plugin.core.log.Log
+    message: "Pipeline completed successfully"
+
+errors:
+  - id: error-notification
+    type: io.kestra.plugin.core.log.Log
+    message: "Pipeline failed: {{execution.state.histories[0].state}}"
+    level: ERROR
+
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in:
+          - SUCCESS
+    tasks:
+      - id: success-notification
+        type: io.kestra.plugin.core.log.Log
+        message: "Data processing completed successfully at {{taskrun.startDate}}"
+```
+
+### Example 2: Parallel Processing with ForEach
+```yaml
+id: parallel-batch-processor
+namespace: data.processing
+
+description: "Process multiple data sources in parallel"
+
+inputs:
+  - id: data_sources
+    type: JSON
+    description: "List of data sources to process"
+    defaults: '["source1", "source2", "source3"]'
+
+tasks:
+  - id: parallel-processing
+    type: io.kestra.plugin.core.flow.EachParallel
+    value: "{{inputs.data_sources}}"
+    tasks:
+      - id: process-source
+        type: io.kestra.plugin.core.flow.Sequential
+        tasks:
+          - id: validate-source
+            type: io.kestra.plugin.core.log.Log
+            message: "Validating source: {{taskrun.value}}"
+          
+          - id: process-source-data
+            type: io.kestra.plugin.core.debug.Return
+            format: "Processing data from {{taskrun.value}}"
+          
+          - id: verify-output
+            type: io.kestra.plugin.core.log.Log
+            message: "Verification complete for {{taskrun.value}}"
+
+  - id: aggregate-results
+    type: io.kestra.plugin.core.debug.Return
+    format: "All sources processed. Results aggregated."
+
+  - id: final-report
+    type: io.kestra.plugin.core.log.Log
+    message: "Batch processing completed for {{inputs.data_sources | length}} sources"
+```
+
+### Example 3: Conditional Workflow with Environment Switching
+```yaml
+id: environment-aware-deployment
+namespace: devops.deployment
+
+description: "Environment-aware deployment workflow"
+
+inputs:
+  - id: environment
+    type: STRING
+    description: "Target environment (dev/staging/production)"
+  - id: version
+    type: STRING
+    description: "Application version to deploy"
+
+tasks:
+  - id: pre-deployment-checks
+    type: io.kestra.plugin.core.log.Log
+    message: "Starting deployment of version {{inputs.version}} to {{inputs.environment}}"
+
+  - id: environment-specific-deployment
+    type: io.kestra.plugin.core.flow.Switch
+    value: "{{inputs.environment}}"
+    cases:
+      development:
+        - id: dev-deployment
+          type: io.kestra.plugin.core.flow.Sequential
+          tasks:
+            - id: dev-build
+              type: io.kestra.plugin.core.debug.Return
+              format: "Building for development environment"
+            - id: dev-deploy
+              type: io.kestra.plugin.core.debug.Return
+              format: "Deploying {{inputs.version}} to development"
+      
+      staging:
+        - id: staging-deployment
+          type: io.kestra.plugin.core.flow.Sequential
+          tasks:
+            - id: staging-tests
+              type: io.kestra.plugin.core.debug.Return
+              format: "Running staging tests"
+            - id: staging-deploy
+              type: io.kestra.plugin.core.debug.Return
+              format: "Deploying {{inputs.version}} to staging"
+      
+      production:
+        - id: production-deployment
+          type: io.kestra.plugin.core.flow.Sequential
+          tasks:
+            - id: production-approval
+              type: io.kestra.plugin.core.flow.Pause
+              timeout: "PT1H"
+            - id: production-deploy
+              type: io.kestra.plugin.core.debug.Return
+              format: "Deploying {{inputs.version}} to production"
+            - id: production-verify
+              type: io.kestra.plugin.core.debug.Return
+              format: "Verifying production deployment"
+    
+    defaults:
+      - id: unknown-environment
+        type: io.kestra.plugin.core.execution.Fail
+        message: "Unknown environment: {{inputs.environment}}"
+
+  - id: post-deployment
+    type: io.kestra.plugin.core.log.Log
+    message: "Deployment completed for environment: {{inputs.environment}}"
+
+errors:
+  - id: deployment-failure
+    type: io.kestra.plugin.core.flow.Sequential
+    tasks:
+      - id: rollback
+        type: io.kestra.plugin.core.log.Log
+        message: "Initiating rollback for failed deployment"
+        level: ERROR
+      - id: notify-team
+        type: io.kestra.plugin.core.log.Log
+        message: "Deployment failed for {{inputs.environment}} - team notified"
+        level: ERROR
+
+triggers:
+  - id: scheduled-deployment
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * 1-5"  # Weekdays at 2 AM
+    timezone: "UTC"
+    inputs:
+      environment: "staging"
+      version: "latest"
+```
+
+### Example 4: Error Handling and Recovery
+```yaml
+id: resilient-data-sync
+namespace: integration.sync
+
+description: "Data synchronization with retry logic and error recovery"
+
+inputs:
+  - id: max_retries
+    type: INT
+    defaults: 3
+    description: "Maximum number of retry attempts"
+
+tasks:
+  - id: sync-with-retry
+    type: io.kestra.plugin.core.flow.ForEach
+    values: '[1, 2, 3]'  # Retry attempts
+    tasks:
+      - id: attempt-sync
+        type: io.kestra.plugin.core.flow.AllowFailure
+        tasks:
+          - id: data-sync
+            type: io.kestra.plugin.core.flow.Sequential
+            tasks:
+              - id: connect-source
+                type: io.kestra.plugin.core.debug.Return
+                format: "Connecting to data source (attempt {{taskrun.value}})"
+              
+              - id: extract-data
+                type: io.kestra.plugin.core.debug.Return
+                format: "Extracting data"
+              
+              - id: validate-data
+                type: io.kestra.plugin.core.flow.If
+                condition: "{{taskrun.value < 3}}"  # Simulate failure on first 2 attempts
+                then:
+                  - id: simulated-failure
+                    type: io.kestra.plugin.core.execution.Fail
+                    message: "Data validation failed on attempt {{taskrun.value}}"
+                else:
+                  - id: successful-validation
+                    type: io.kestra.plugin.core.debug.Return
+                    format: "Data validation successful"
+              
+              - id: sync-data
+                type: io.kestra.plugin.core.debug.Return
+                format: "Data synchronized successfully"
+        
+        errors:
+          - id: retry-delay
+            type: io.kestra.plugin.core.flow.Sleep
+            duration: "PT10S"  # Wait 10 seconds before retry
+          
+          - id: log-retry
+            type: io.kestra.plugin.core.log.Log
+            message: "Sync attempt {{taskrun.value}} failed, retrying..."
+            level: WARN
+
+  - id: final-status
+    type: io.kestra.plugin.core.log.Log
+    message: "Data synchronization process completed"
+
+errors:
+  - id: max-retries-exceeded
+    type: io.kestra.plugin.core.flow.Sequential
+    tasks:
+      - id: log-failure
+        type: io.kestra.plugin.core.log.Log
+        message: "Data sync failed after {{inputs.max_retries}} attempts"
+        level: ERROR
+      
+      - id: fallback-action
+        type: io.kestra.plugin.core.debug.Return
+        format: "Executing fallback data recovery procedure"
+```
+
+## Best Practices
+
+### 1. Naming Conventions
+- Use kebab-case for IDs: `data-processing-task`
+- Use descriptive namespaces: `company.team.project`
+- Include meaningful descriptions for complex workflows
+
+### 2. Error Handling
+- Always include error handlers for critical workflows
+- Use `AllowFailure` for optional tasks
+- Implement retry logic with delays for transient failures
+
+### 3. Resource Management
+- Use `WorkingDirectory` for file operations
+- Clean up temporary resources in error handlers
+- Set appropriate timeouts for long-running tasks
+
+### 4. Performance Optimization
+- Use `Parallel` or `EachParallel` for independent tasks
+- Minimize task overhead with efficient task grouping
+- Consider resource limits for parallel executions
+
+### 5. Monitoring and Observability
+- Include logging at key workflow points
+- Use meaningful output formats for debugging
+- Implement status notifications through listeners
+
+This documentation provides comprehensive coverage of Kestra workflow YAML syntax, task types, and practical examples suitable for LLM understanding and code generation assistance.
