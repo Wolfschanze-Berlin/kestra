@@ -1,0 +1,286 @@
+# Kestra - Event-Driven Declarative Orchestration Platform
+
+## Project Overview
+
+Kestra is an open-source, event-driven orchestration platform that makes both scheduled and event-driven workflows easy. It follows Infrastructure as Code best practices for data, process, and microservice orchestration, allowing users to build reliable workflows directly from the UI in just a few lines of YAML.
+
+**Website**: https://kestra.io
+**Repository**: https://github.com/kestra-io/kestra
+**License**: Apache License 2.0
+
+## Key Features
+
+- **Everything as Code and from the UI**: Keep workflows as code with Git Version Control integration, even when building them from the UI
+- **Event-Driven & Scheduled Workflows**: Automate both scheduled and real-time event-driven workflows via simple trigger definitions
+- **Declarative YAML Interface**: Define workflows using simple configuration in the built-in code editor
+- **Rich Plugin Ecosystem**: Hundreds of built-in plugins to extract data from any database, cloud storage, or API, and run scripts in any language
+- **Intuitive UI & Code Editor**: Build and visualize workflows directly from the UI with syntax highlighting, auto-completion and real-time syntax validation
+- **Scalable**: Designed to handle millions of workflows, with high availability and fault tolerance
+- **Version Control Friendly**: Write workflows from the built-in code Editor and push them to your preferred Git branch directly from Kestra
+
+## Technology Stack
+
+### Backend
+- **Language**: Java 21+
+- **Framework**: Micronaut Framework
+- **Build System**: Gradle
+- **Database Support**: H2, MySQL, PostgreSQL
+- **Storage**: Local file system, cloud storage integrations
+- **Containerization**: Docker
+
+### Frontend
+- **Framework**: Vue.js 3
+- **Build Tool**: Vite
+- **Language**: TypeScript/JavaScript
+- **UI Library**: Custom components with @kestra-io/ui-libs
+- **Flow Visualization**: Vue Flow (@vue-flow/core)
+
+### Development Requirements
+- Java 21+
+- Node 18+ and npm
+- Python 3, pip and python venv
+- Docker & Docker Compose
+- IDE (IntelliJ IDEA, Eclipse, or VS Code)
+
+## Architecture Overview
+
+### Core Modules (Gradle Subprojects)
+- **core**: Core functionality, models, and services
+- **webserver**: REST API and web interface
+- **ui**: Vue.js frontend application
+- **cli**: Command-line interface
+- **platform**: Platform-specific integrations
+- **model**: Data models and DTOs
+- **processor**: Workflow processing engine
+- **script**: Script execution capabilities
+
+### Storage and Persistence
+- **storage-local**: Local file system storage
+- **repository-memory**: In-memory repository implementation
+- **jdbc**: JDBC abstraction layer
+- **jdbc-h2**: H2 database integration
+- **jdbc-mysql**: MySQL database integration
+- **jdbc-postgres**: PostgreSQL database integration
+
+### Runtime Components
+- **runner-memory**: In-memory task runner
+- **tests**: Test utilities and integration tests
+- **e2e-tests**: End-to-end testing suite
+- **jmh-benchmarks**: Performance benchmarking
+
+## Core Concepts
+
+### Flows
+Flows are the main building blocks in Kestra, defined in YAML format. Each flow contains:
+- **id**: Unique identifier
+- **namespace**: Organizational grouping
+- **tasks**: List of tasks to execute
+- **triggers**: Optional triggers for automatic execution
+- **inputs**: Parameters that can be passed to the flow
+- **outputs**: Values returned from the flow
+
+Example flow structure:
+```yaml
+id: example_flow
+namespace: dev
+tasks:
+  - id: task_name
+    type: io.kestra.plugin.core.log.Log
+    message: "Hello, World!"
+```
+
+### Tasks
+Tasks are individual units of work within a flow. Core task types include:
+- **ExecutableTask**: Tasks that can be executed
+- **FlowableTask**: Tasks that can contain sub-tasks
+- **RunnableTask**: Tasks that run external processes
+- **GenericTask**: Generic task implementation
+
+### Triggers
+Triggers define when flows should be executed:
+- **Schedule**: Time-based triggers (cron expressions)
+- **Webhook**: HTTP-triggered flows
+- **Event**: External event-triggered flows
+- **Flow**: Triggered by other flow completions
+
+### Executions
+Executions represent instances of flow runs, tracking:
+- State progression (CREATED, RUNNING, SUCCESS, FAILED)
+- Task outputs and logs
+- Duration and metrics
+- Error handling and retries
+
+## Plugin System
+
+Kestra's plugin system is central to its extensibility:
+- **Plugin Registry**: Central registry for plugin discovery
+- **Plugin Manager**: Handles plugin loading and lifecycle
+- **Plugin Artifacts**: Maven-based plugin distribution
+- **Plugin Documentation**: Auto-generated documentation
+
+### Plugin Structure
+Plugins are Java libraries that extend Kestra's capabilities:
+- Located in `io.kestra.plugin.*` packages
+- Implement specific interfaces (Task, Trigger, etc.)
+- Use annotations for configuration (@Schema, @PluginProperty)
+- Support for any JVM language
+
+## Development Setup
+
+### Building the Project
+```bash
+# Clone the repository
+git clone https://github.com/kestra-io/kestra.git
+cd kestra
+
+# Build with Gradle
+./gradlew build
+
+# Run tests
+./gradlew test
+
+# Start development server
+./gradlew server --args="server local"
+```
+
+### Frontend Development
+```bash
+cd ui
+npm install
+npm run dev  # Start development server
+npm run build  # Build for production
+```
+
+### Docker Development
+```bash
+# Start with Docker Compose
+docker-compose up -d
+
+# Or use the single container
+docker run -p 8080:8080 kestra/kestra:latest server local
+```
+
+## Configuration
+
+### Application Configuration
+Kestra uses Micronaut's configuration system:
+- `application.yml` for main configuration
+- Environment-specific overrides
+- Property injection via `@Value` annotations
+
+### Database Configuration
+Supports multiple databases through JDBC:
+- H2 (default, embedded)
+- PostgreSQL (recommended for production)
+- MySQL
+
+### Storage Configuration
+Flexible storage backends:
+- Local filesystem
+- Cloud storage (AWS S3, Google Cloud Storage, Azure Blob)
+- Custom storage implementations
+
+## API Structure
+
+### REST API
+The webserver module provides RESTful APIs:
+- **Flows**: CRUD operations for flow management
+- **Executions**: Execution monitoring and control
+- **Triggers**: Trigger management
+- **Plugins**: Plugin information and documentation
+- **Stats**: Metrics and statistics
+
+### WebSocket API
+Real-time updates for:
+- Execution logs
+- State changes
+- System notifications
+
+## Security
+
+### Authentication & Authorization
+- Pluggable authentication providers
+- Role-based access control (RBAC)
+- Multi-tenancy support
+- Secret management
+
+### Secrets Management
+- Encrypted secret storage
+- Environment variable injection
+- Integration with external secret managers
+
+## Monitoring & Observability
+
+### Metrics
+- Micrometer-based metrics
+- Prometheus integration
+- Custom metrics for flows and tasks
+
+### Logging
+- Structured logging with Logback
+- Per-execution log isolation
+- Configurable log levels
+
+### Tracing
+- OpenTracing/OpenTelemetry support
+- Distributed tracing for complex workflows
+
+## Testing
+
+### Test Structure
+- **Unit Tests**: `src/test/java` in each module
+- **Integration Tests**: `tests` module
+- **End-to-End Tests**: `e2e-tests` module
+- **Performance Tests**: `jmh-benchmarks` module
+
+### Test Utilities
+- Test execution framework
+- Mock implementations
+- Test data builders
+
+## Deployment
+
+### Container Deployment
+- Official Docker images
+- Kubernetes Helm charts
+- Docker Compose configurations
+
+### Cloud Deployment
+- AWS deployment guides
+- Google Cloud Platform integration
+- Azure deployment options
+
+## Community & Support
+
+### Communication Channels
+- **Slack**: Community discussions
+- **GitHub Issues**: Bug reports and feature requests
+- **Documentation**: https://kestra.io/docs
+- **Blog**: https://kestra.io/blog
+
+### Contributing
+- Apache 2.0 license
+- Contributor guidelines in `.github/CONTRIBUTING.md`
+- Code of conduct enforcement
+- Pull request templates
+
+## File Structure Navigation
+
+### Key Directories
+- `/core/src/main/java/io/kestra/core/`: Core functionality
+  - `models/`: Data models (flows, tasks, executions)
+  - `plugins/`: Plugin system
+  - `runners/`: Task execution
+  - `schedulers/`: Scheduling engine
+  - `services/`: Business logic
+- `/webserver/src/main/java/`: REST API and web services
+- `/ui/src/`: Vue.js frontend application
+- `/cli/src/main/java/`: Command-line interface
+
+### Configuration Files
+- `build.gradle`: Main build configuration
+- `settings.gradle`: Module definitions
+- `docker-compose.yml`: Development environment
+- `.github/`: CI/CD workflows and templates
+
+This documentation should help LLMs understand Kestra's architecture, purpose, and development patterns when analyzing or contributing to the codebase.
