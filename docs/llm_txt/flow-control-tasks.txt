@@ -1,0 +1,307 @@
+# Kestra Flow Control Tasks
+
+Flow control tasks manage the execution flow and logic of workflows. They determine the order and conditions under which tasks execute.
+
+## Sequential Execution
+
+Execute tasks one after another in order.
+
+```yaml
+- id: sequential-tasks
+  type: io.kestra.plugin.core.flow.Sequential
+  tasks:
+    - id: first-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Step 1"
+    - id: second-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Step 2"
+```
+
+## Parallel Execution
+
+Execute multiple tasks concurrently to improve performance.
+
+```yaml
+- id: parallel-tasks
+  type: io.kestra.plugin.core.flow.Parallel
+  tasks:
+    - id: parallel-task-1
+      type: io.kestra.plugin.core.debug.Return
+      format: "Parallel Task 1"
+    - id: parallel-task-2
+      type: io.kestra.plugin.core.debug.Return
+      format: "Parallel Task 2"
+```
+
+## ForEach Loop
+
+Process a list of items with the same task(s).
+
+```yaml
+- id: foreach-loop
+  type: io.kestra.plugin.core.flow.ForEach
+  values: '["item1", "item2", "item3"]'      # Can be JSON array or expression
+  tasks:
+    - id: process-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Processing: {{taskrun.value}}"
+```
+
+## EachSequential (Sequential ForEach)
+
+Process items one by one in sequence.
+
+```yaml
+- id: each-sequential
+  type: io.kestra.plugin.core.flow.EachSequential
+  value: '{{inputs.items}}'
+  tasks:
+    - id: sequential-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Item: {{taskrun.value}}"
+```
+
+## EachParallel (Parallel ForEach)
+
+Process items concurrently for better performance.
+
+```yaml
+- id: each-parallel
+  type: io.kestra.plugin.core.flow.EachParallel
+  value: '{{inputs.items}}'
+  tasks:
+    - id: parallel-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Item: {{taskrun.value}}"
+```
+
+## Switch (Conditional Branching)
+
+Execute different task sets based on a value.
+
+```yaml
+- id: switch-case
+  type: io.kestra.plugin.core.flow.Switch
+  value: "{{inputs.environment}}"
+  cases:
+    production:
+      - id: prod-task
+        type: io.kestra.plugin.core.debug.Return
+        format: "Production environment"
+    staging:
+      - id: staging-task
+        type: io.kestra.plugin.core.debug.Return
+        format: "Staging environment"
+  defaults:                                   # Optional: default case
+    - id: default-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Unknown environment"
+```
+
+## If Conditional
+
+Execute tasks based on boolean conditions.
+
+```yaml
+- id: if-condition
+  type: io.kestra.plugin.core.flow.If
+  condition: "{{inputs.enabled == true}}"
+  then:
+    - id: enabled-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Feature is enabled"
+  else:                                       # Optional
+    - id: disabled-task
+      type: io.kestra.plugin.core.debug.Return
+      format: "Feature is disabled"
+```
+
+## Subflow
+
+Call another workflow as a task.
+
+```yaml
+- id: call-subflow
+  type: io.kestra.plugin.core.flow.Subflow
+  namespace: io.kestra.subflows
+  flowId: helper-workflow
+  inputs:
+    parameter1: "value1"
+    parameter2: "{{outputs.previous-task.value}}"
+```
+
+## DAG (Directed Acyclic Graph)
+
+Define complex task dependencies with explicit dependency declarations.
+
+```yaml
+- id: dag-execution
+  type: io.kestra.plugin.core.flow.Dag
+  tasks:
+    - task:
+        id: task1
+        type: io.kestra.plugin.core.debug.Return
+        format: "First task"
+    
+    - task:
+        id: task2
+        type: io.kestra.plugin.core.debug.Return
+        format: "Depends on task1"
+      dependsOn:
+        - task1
+    
+    - task:
+        id: task3
+        type: io.kestra.plugin.core.debug.Return
+        format: "Also depends on task1"
+      dependsOn:
+        - task1
+    
+    - task:
+        id: task4
+        type: io.kestra.plugin.core.debug.Return
+        format: "Depends on both task2 and task3"
+      dependsOn:
+        - task2
+        - task3
+```
+
+## LoopUntil (Polling)
+
+Repeat tasks until a condition is met, useful for polling external systems.
+
+```yaml
+- id: wait-for-completion
+  type: io.kestra.plugin.core.flow.LoopUntil
+  condition: "{{ outputs.check_status.status == 'COMPLETED' }}"
+  maxIterations: 10                           # Optional: prevent infinite loops
+  maxDuration: "PT1H"                         # Optional: timeout after 1 hour
+  tasks:
+    - id: check_status
+      type: io.kestra.plugin.core.debug.Return
+      format: "{{ random() > 0.8 ? 'COMPLETED' : 'PENDING' }}"  # Simulate status check
+    
+    - id: wait
+      type: io.kestra.plugin.core.flow.Sleep
+      duration: "PT30S"                       # Wait 30 seconds between checks
+```
+
+## ForEachItem (Advanced Loop)
+
+Process items with metadata and complex data structures.
+
+```yaml
+- id: process-items-with-metadata
+  type: io.kestra.plugin.core.flow.ForEachItem
+  items:
+    - value: "item1"
+      metadata:
+        priority: "high"
+        category: "A"
+    - value: "item2"
+      metadata:
+        priority: "low"
+        category: "B"
+  tasks:
+    - id: process-item
+      type: io.kestra.plugin.core.debug.Return
+      format: "Processing {{taskrun.items.value}} with priority {{taskrun.items.metadata.priority}}"
+```
+
+## Template Task
+
+Use predefined workflow templates for reusable patterns.
+
+```yaml
+- id: templated-execution
+  type: io.kestra.plugin.core.flow.Template
+  namespace: templates.common
+  templateId: data-processing-template
+  inputs:
+    source: "{{inputs.data_source}}"
+    target: "{{inputs.output_location}}"
+```
+
+## Advanced Flow Control Patterns
+
+### Nested Flow Control
+
+Combine multiple flow control types for complex logic:
+
+```yaml
+- id: complex-flow
+  type: io.kestra.plugin.core.flow.If
+  condition: "{{inputs.environment == 'production'}}"
+  then:
+    - id: production-processing
+      type: io.kestra.plugin.core.flow.Parallel
+      tasks:
+        - id: process-batch-1
+          type: io.kestra.plugin.core.flow.ForEach
+          values: "{{inputs.batch1}}"
+          tasks:
+            - id: process-item
+              type: io.kestra.plugin.core.debug.Return
+              format: "Processing {{taskrun.value}}"
+        - id: process-batch-2
+          type: io.kestra.plugin.core.flow.ForEach
+          values: "{{inputs.batch2}}"
+          tasks:
+            - id: process-item
+              type: io.kestra.plugin.core.debug.Return
+              format: "Processing {{taskrun.value}}"
+```
+
+### Dynamic Task Generation
+
+Use expressions to create dynamic workflows:
+
+```yaml
+- id: dynamic-switch
+  type: io.kestra.plugin.core.flow.Switch
+  value: "{{inputs.processing_type}}"
+  cases:
+    batch:
+      - id: batch-processing
+        type: io.kestra.plugin.core.flow.ForEach
+        values: "{{inputs.items}}"
+        tasks:
+          - id: process-batch-item
+            type: io.kestra.plugin.core.debug.Return
+            format: "Batch processing: {{taskrun.value}}"
+    stream:
+      - id: stream-processing
+        type: io.kestra.plugin.core.debug.Return
+        format: "Stream processing mode enabled"
+```
+
+### Error Recovery with Flow Control
+
+Implement error recovery patterns:
+
+```yaml
+- id: resilient-processing
+  type: io.kestra.plugin.core.flow.AllowFailure
+  tasks:
+    - id: primary-processing
+      type: io.kestra.plugin.core.debug.Return
+      format: "Primary processing"
+- id: fallback-if-failed
+  type: io.kestra.plugin.core.flow.If
+  condition: "{{outputs.resilient_processing.taskRunId == null}}"
+  then:
+    - id: fallback-processing
+      type: io.kestra.plugin.core.debug.Return
+      format: "Fallback processing"
+```
+
+## Best Practices for Flow Control
+
+1. **Use appropriate parallelism**: Balance between performance and resource usage
+2. **Implement timeouts**: Prevent infinite loops with maxDuration and maxIterations
+3. **Handle edge cases**: Use default cases in Switch statements
+4. **Optimize dependencies**: Minimize unnecessary task dependencies in DAG
+5. **Use meaningful task IDs**: Make flow logic easy to understand and debug
+6. **Implement graceful degradation**: Use AllowFailure and conditional recovery
+7. **Monitor performance**: Track execution times for parallel and loop tasks

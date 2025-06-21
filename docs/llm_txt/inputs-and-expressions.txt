@@ -1,0 +1,270 @@
+# Kestra Inputs and Expressions
+
+## Input Types Documentation
+
+### Supported Input Types
+
+#### STRING
+```yaml
+inputs:
+  - id: message
+    type: STRING
+    description: "Text message to process"
+    defaults: "Hello World"
+```
+
+#### INT (Integer)
+```yaml
+inputs:
+  - id: batch_size
+    type: INT
+    description: "Number of items to process"
+    defaults: 100
+```
+
+#### FLOAT (Decimal)
+```yaml
+inputs:
+  - id: threshold
+    type: FLOAT
+    description: "Processing threshold value"
+    defaults: 0.85
+```
+
+#### BOOLEAN
+```yaml
+inputs:
+  - id: enable_notifications
+    type: BOOLEAN
+    description: "Whether to send notifications"
+    defaults: true
+```
+
+#### JSON
+```yaml
+inputs:
+  - id: config
+    type: JSON
+    description: "Configuration object"
+    defaults: '{"retries": 3, "timeout": 30}'
+```
+
+#### DATETIME
+```yaml
+inputs:
+  - id: start_date
+    type: DATETIME
+    description: "Processing start date"
+    defaults: "2024-01-01T00:00:00Z"
+```
+
+#### FILE
+```yaml
+inputs:
+  - id: data_file
+    type: FILE
+    description: "Input data file to process"
+```
+
+#### SECRET
+```yaml
+inputs:
+  - id: api_token
+    type: SECRET
+    description: "API authentication token"
+```
+
+## Expression Language
+
+Kestra uses Pebble-based expression language for dynamic values and templating.
+
+### Common Expressions
+
+#### Accessing Input Values
+```yaml
+tasks:
+  - id: use-input
+    type: io.kestra.plugin.core.debug.Return
+    format: "Processing file: {{inputs.data_file}}"
+```
+
+#### Accessing Task Outputs
+```yaml
+tasks:
+  - id: first-task
+    type: io.kestra.plugin.core.debug.Return
+    format: "Result from first task"
+  - id: second-task
+    type: io.kestra.plugin.core.debug.Return
+    format: "Previous result: {{outputs.first-task.value}}"
+```
+
+#### Accessing Flow Variables
+```yaml
+tasks:
+  - id: use-flow-vars
+    type: io.kestra.plugin.core.debug.Return
+    format: "Flow ID: {{flow.id}}, Execution ID: {{execution.id}}"
+```
+
+#### Conditional Expressions
+```yaml
+tasks:
+  - id: conditional-logic
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{inputs.batch_size > 100}}"
+    then:
+      - id: large-batch
+        type: io.kestra.plugin.core.debug.Return
+        format: "Processing large batch"
+    else:
+      - id: small-batch
+        type: io.kestra.plugin.core.debug.Return
+        format: "Processing small batch"
+```
+
+### Functions
+
+#### String Functions
+```yaml
+tasks:
+  - id: string-operations
+    type: io.kestra.plugin.core.debug.Return
+    format: "{{inputs.message | upper}} - Length: {{inputs.message | length}}"
+```
+
+#### Date Functions
+```yaml
+tasks:
+  - id: date-operations
+    type: io.kestra.plugin.core.debug.Return
+    format: "Current date: {{now()}} - Formatted: {{now() | date('yyyy-MM-dd')}}"
+```
+
+#### Math Functions
+```yaml
+tasks:
+  - id: math-operations
+    type: io.kestra.plugin.core.debug.Return
+    format: "Random: {{random()}} - Max: {{max(inputs.value1, inputs.value2)}}"
+```
+
+#### JSON Functions
+```yaml
+tasks:
+  - id: json-operations
+    type: io.kestra.plugin.core.debug.Return
+    format: "Config value: {{inputs.config | json_path('$.retries')}}"
+```
+
+### Variable Scopes
+
+#### Flow Variables
+- `{{flow.id}}` - Current flow identifier
+- `{{flow.namespace}}` - Current flow namespace
+- `{{flow.revision}}` - Current flow revision
+
+#### Execution Variables
+- `{{execution.id}}` - Current execution identifier
+- `{{execution.startDate}}` - Execution start timestamp
+- `{{execution.labels}}` - Execution labels
+
+#### Task Variables
+- `{{task.id}}` - Current task identifier
+- `{{task.type}}` - Current task type
+- `{{taskrun.id}}` - Current task run identifier
+- `{{taskrun.startDate}}` - Task run start timestamp
+- `{{taskrun.value}}` - Current iteration value (in loops)
+
+#### Parent Variables (in subflows)
+- `{{parent.outputs}}` - Parent workflow outputs
+- `{{parent.inputs}}` - Parent workflow inputs
+
+### Advanced Expression Examples
+
+#### Complex Conditional Logic
+```yaml
+tasks:
+  - id: complex-condition
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{inputs.environment == 'production' && inputs.batch_size > 1000}}"
+    then:
+      - id: production-large-batch
+        type: io.kestra.plugin.core.debug.Return
+        format: "Production large batch processing"
+```
+
+#### Dynamic Task Configuration
+```yaml
+tasks:
+  - id: dynamic-config
+    type: io.kestra.plugin.core.debug.Return
+    format: "{{inputs.environment == 'dev' ? 'Debug mode enabled' : 'Production mode'}}"
+```
+
+#### Iteration with Expressions
+```yaml
+tasks:
+  - id: process-items
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{inputs.config | json_path('$.items')}}"
+    tasks:
+      - id: process-item
+        type: io.kestra.plugin.core.debug.Return
+        format: "Processing item {{taskrun.value}} (index: {{taskrun.iteration}})"
+```
+
+#### Error Handling with Expressions
+```yaml
+tasks:
+  - id: conditional-error
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{inputs.data_file == null}}"
+    then:
+      - id: fail-missing-file
+        type: io.kestra.plugin.core.execution.Fail
+        message: "Required input 'data_file' is missing"
+```
+
+### Expression Best Practices
+
+1. **Use appropriate data types**: Match input types to expected usage
+2. **Validate expressions**: Test complex expressions before deployment
+3. **Handle null values**: Use defensive programming for optional inputs
+4. **Use meaningful variable names**: Make expressions self-documenting
+5. **Escape special characters**: Properly escape strings in expressions
+
+### Common Expression Patterns
+
+#### Environment-specific Configuration
+```yaml
+tasks:
+  - id: env-config
+    type: io.kestra.plugin.core.debug.Return
+    format: |
+      {{
+        inputs.environment == 'production' ? 
+          'prod-database.company.com' : 
+          'dev-database.company.com'
+      }}
+```
+
+#### Default Value Handling
+```yaml
+tasks:
+  - id: default-handling
+    type: io.kestra.plugin.core.debug.Return
+    format: "Batch size: {{inputs.batch_size ?? 100}}"
+```
+
+#### Array and Object Processing
+```yaml
+tasks:
+  - id: array-processing
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{inputs.items | default(['default_item'])}}"
+    tasks:
+      - id: process-array-item
+        type: io.kestra.plugin.core.debug.Return
+        format: "Item: {{taskrun.value}}"
+```

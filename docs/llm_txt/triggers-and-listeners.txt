@@ -1,0 +1,420 @@
+# Kestra Triggers and Listeners
+
+Triggers and listeners enable event-driven workflow execution, allowing workflows to respond to schedules, external events, and other workflow completions.
+
+## Triggers
+
+Triggers define when and how workflows should be executed automatically.
+
+### Schedule Trigger
+Execute workflows on a regular schedule using cron expressions.
+
+```yaml
+triggers:
+  - id: schedule-trigger
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 0 * * *"                        # Daily at midnight
+    timezone: "UTC"
+    inputs:
+      environment: "production"
+```
+
+**Common Cron Patterns:**
+- `0 0 * * *` - Daily at midnight
+- `0 */6 * * *` - Every 6 hours
+- `0 0 * * 1` - Every Monday at midnight
+- `0 9 1 * *` - First day of every month at 9 AM
+
+### Schedule on Dates Trigger
+Execute workflows on specific dates.
+
+```yaml
+triggers:
+  - id: schedule-on-dates
+    type: io.kestra.plugin.core.trigger.ScheduleOnDates
+    dates:
+      - "2024-01-01T09:00:00Z"
+      - "2024-07-04T09:00:00Z"
+      - "2024-12-25T09:00:00Z"
+    timezone: "UTC"
+```
+
+### Webhook Trigger
+Trigger workflows via HTTP webhooks.
+
+```yaml
+triggers:
+  - id: webhook-trigger
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: "webhook-key"                        # Unique webhook identifier
+```
+
+### Flow Trigger
+Trigger workflows when other workflows complete.
+
+```yaml
+triggers:
+  - id: flow-trigger
+    type: io.kestra.plugin.core.trigger.Flow
+    conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in:
+          - SUCCESS
+    inputs:
+      triggered_by: "{{trigger.executionId}}"
+      source_flow: "{{trigger.flowId}}"
+```
+
+### Toggle Trigger
+Enable/disable triggers based on conditions.
+
+```yaml
+triggers:
+  - id: toggle-trigger
+    type: io.kestra.plugin.core.trigger.Toggle
+    conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in:
+          - SUCCESS
+          - FAILED
+```
+
+## Listeners
+
+Listeners respond to events during workflow execution and can execute tasks based on conditions.
+
+### Execution-Based Conditions
+
+#### Execution Status Condition
+React to specific execution statuses.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in:
+          - FAILED
+          - SUCCESS
+    tasks:
+      - id: status-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution status: {{execution.state.current}}"
+```
+
+#### Execution Flow Condition
+React to specific workflows.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionFlow
+        namespace: "company.team"
+        flowId: "specific-workflow"
+    tasks:
+      - id: flow-specific-handler
+        type: io.kestra.plugin.core.debug.Return
+        format: "Triggered by specific flow"
+```
+
+#### Execution Namespace Condition
+React to executions from specific namespaces.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionNamespace
+        namespace: "company.production"
+        prefix: true                          # Match namespace prefix
+    tasks:
+      - id: namespace-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Production namespace execution"
+```
+
+#### Execution Labels Condition
+React to executions with specific labels.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionLabels
+        labels:
+          environment: "production"
+          team: "data-engineering"
+    tasks:
+      - id: labeled-execution-handler
+        type: io.kestra.plugin.core.debug.Return
+        format: "Handling labeled execution"
+```
+
+#### Execution Outputs Condition
+React based on execution outputs.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionOutputs
+        expression: "{{ outputs.task1.status == 'success' }}"
+    tasks:
+      - id: output-condition-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Task1 completed successfully"
+```
+
+#### Has Retry Attempt Condition
+React to executions that had retry attempts.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.HasRetryAttempt
+    tasks:
+      - id: retry-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution had retry attempts"
+        level: WARN
+```
+
+### Expression Condition
+Use custom expressions for complex conditions.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Expression
+        expression: "{{ execution.state.duration.toMinutes() > 30 }}"
+    tasks:
+      - id: long-execution-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution took longer than 30 minutes"
+        level: WARN
+```
+
+### Time-Based Conditions
+
+#### DateTime Between Condition
+React during specific date/time ranges.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.DateTimeBetween
+        after: "2024-01-01T00:00:00Z"
+        before: "2024-12-31T23:59:59Z"
+    tasks:
+      - id: date-range-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution within date range"
+```
+
+#### Time Between Condition
+React during specific time windows.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.TimeBetween
+        after: "09:00:00"
+        before: "17:00:00"
+        timezone: "UTC"
+    tasks:
+      - id: business-hours-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution during business hours"
+```
+
+#### Day of Week Condition
+React on specific days of the week.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.DayOfWeek
+        dayOfWeek: "MONDAY"
+    tasks:
+      - id: monday-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Monday execution"
+```
+
+#### Weekend Condition
+React on weekends.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Weekend
+    tasks:
+      - id: weekend-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Weekend execution"
+```
+
+### Logical Conditions
+
+#### Multiple Condition (AND)
+Combine multiple conditions with AND logic.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Multiple
+        conditions:
+          - type: io.kestra.plugin.core.condition.ExecutionStatus
+            in: [SUCCESS]
+          - type: io.kestra.plugin.core.condition.ExecutionNamespace
+            namespace: "production"
+    tasks:
+      - id: combined-condition-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Successful production execution"
+```
+
+#### Or Condition
+Combine multiple conditions with OR logic.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Or
+        conditions:
+          - type: io.kestra.plugin.core.condition.ExecutionStatus
+            in: [FAILED]
+          - type: io.kestra.plugin.core.condition.HasRetryAttempt
+    tasks:
+      - id: error-or-retry-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution failed or had retries"
+        level: WARN
+```
+
+#### Not Condition
+Negate a condition.
+
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Not
+        condition:
+          type: io.kestra.plugin.core.condition.ExecutionStatus
+          in: [SUCCESS]
+    tasks:
+      - id: non-success-handler
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution was not successful"
+        level: ERROR
+```
+
+## Advanced Trigger and Listener Patterns
+
+### Conditional Workflow Chaining
+```yaml
+# Workflow A
+triggers:
+  - id: daily-schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *"
+
+# Workflow B
+triggers:
+  - id: after-workflow-a
+    type: io.kestra.plugin.core.trigger.Flow
+    conditions:
+      - type: io.kestra.plugin.core.condition.ExecutionFlow
+        namespace: "company.data"
+        flowId: "workflow-a"
+      - type: io.kestra.plugin.core.condition.ExecutionStatus
+        in: [SUCCESS]
+```
+
+### Error Monitoring and Alerting
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Multiple
+        conditions:
+          - type: io.kestra.plugin.core.condition.ExecutionStatus
+            in: [FAILED]
+          - type: io.kestra.plugin.core.condition.ExecutionLabels
+            labels:
+              criticality: "high"
+    tasks:
+      - id: critical-failure-alert
+        type: io.kestra.plugin.core.log.Log
+        message: "CRITICAL: High priority workflow failed"
+        level: ERROR
+      - id: send-notification
+        type: io.kestra.plugin.core.debug.Return
+        format: "Send alert to on-call team"
+```
+
+### Performance Monitoring
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Expression
+        expression: "{{ execution.state.duration.toMinutes() > 60 }}"
+    tasks:
+      - id: performance-alert
+        type: io.kestra.plugin.core.metric.Publish
+        metrics:
+          - name: "long_running_execution"
+            type: "counter"
+            value: 1
+            tags:
+              workflow: "{{execution.flowId}}"
+              duration_minutes: "{{execution.state.duration.toMinutes()}}"
+```
+
+### Environment-Specific Listeners
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.Multiple
+        conditions:
+          - type: io.kestra.plugin.core.condition.ExecutionNamespace
+            namespace: "production"
+            prefix: true
+          - type: io.kestra.plugin.core.condition.TimeBetween
+            after: "18:00:00"
+            before: "06:00:00"
+            timezone: "UTC"
+    tasks:
+      - id: after-hours-production-alert
+        type: io.kestra.plugin.core.log.Log
+        message: "Production workflow executed outside business hours"
+        level: WARN
+```
+
+### Retry and Recovery Patterns
+```yaml
+listeners:
+  - conditions:
+      - type: io.kestra.plugin.core.condition.HasRetryAttempt
+    tasks:
+      - id: log-retry-details
+        type: io.kestra.plugin.core.log.Log
+        message: "Execution {{execution.id}} required retries"
+        level: WARN
+      - id: check-retry-count
+        type: io.kestra.plugin.core.flow.If
+        condition: "{{ execution.taskRunList | filter(taskRun -> taskRun.attempts > 2) | length > 0 }}"
+        then:
+          - id: escalate-issue
+            type: io.kestra.plugin.core.log.Log
+            message: "Multiple retries detected - potential system issue"
+            level: ERROR
+```
+
+## Best Practices for Triggers and Listeners
+
+1. **Use specific conditions**: Avoid overly broad conditions that trigger unnecessarily
+2. **Implement proper error handling**: Handle listener task failures gracefully
+3. **Monitor listener performance**: Track execution times and resource usage
+4. **Use meaningful IDs**: Make trigger and listener purposes clear
+5. **Avoid circular dependencies**: Prevent workflows from triggering themselves
+6. **Implement rate limiting**: Use conditions to prevent excessive triggering
+7. **Test conditions thoroughly**: Validate complex expressions before deployment
+8. **Use appropriate timezone settings**: Ensure schedule triggers use correct timezones
+9. **Document trigger dependencies**: Maintain clear documentation of workflow chains
+10. **Implement monitoring**: Use listeners to monitor system health and performance
