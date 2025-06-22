@@ -12,14 +12,15 @@ Comprehensive documentation of Kestra's workflow orchestration platform and exte
 - **[triggers-and-listeners.txt](triggers-and-listeners.txt)** - Event-driven execution patterns
 - **[best-practices.txt](best-practices.txt)** - Production guidelines and optimization
 
-### Plugin Ecosystem Documentation
-- **[plugin-ecosystem.txt](plugin-ecosystem.txt)** - Complete overview of 80+ plugin repositories
-- **[plugin-categories.txt](plugin-categories.txt)** - Categorized plugin reference and integration patterns
+### Plugin Ecosystem Documentation  
+- **[plugins-directory.txt](plugins-directory.txt)** - Complete 700+ plugins directory and quick reference
+- **[plugin-ecosystem.txt](plugin-ecosystem.txt)** - Detailed plugin examples and integration patterns
+- **[plugin-categories.txt](plugin-categories.txt)** - Categorized plugin reference by use case
 - **[advanced-workflow-examples.txt](advanced-workflow-examples.txt)** - Production-ready workflow examples
 
 ## 🌐 Kestra Plugin Ecosystem Overview
 
-Kestra features one of the most comprehensive workflow orchestration plugin ecosystems with **80+ plugin repositories** containing hundreds of task types:
+Kestra features one of the most comprehensive workflow orchestration plugin ecosystems with **700+ plugins** across 13 official categories:
 
 ### Major Plugin Categories
 

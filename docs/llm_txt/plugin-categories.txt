@@ -1,6 +1,6 @@
-# Kestra Plugin Categories and Integration Patterns
+# Kestra Plugin Categories and Integration Patterns (700+ Plugins)
 
-This document categorizes Kestra's 80+ plugin repositories by integration type and provides practical usage patterns.
+This document categorizes Kestra's 700+ plugins by the 13 official categories and provides practical usage patterns across the complete ecosystem.
 
 ## Plugin Repository Categories
 
