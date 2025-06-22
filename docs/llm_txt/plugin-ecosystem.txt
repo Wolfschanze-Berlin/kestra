@@ -1,0 +1,503 @@
+# Kestra Complete Plugin Ecosystem
+
+Kestra has a vast ecosystem of 80+ plugin repositories containing hundreds of task types for every integration scenario.
+
+## Core Built-in Plugins (107+ tasks)
+
+### Flow Control Plugins
+- **Sequential** - Execute tasks in sequence
+- **Parallel** - Execute tasks concurrently
+- **ForEach/EachSequential/EachParallel** - Iteration patterns
+- **If** - Conditional execution
+- **Switch** - Multi-branch conditional logic
+- **Subflow** - Call other workflows
+- **Dag** - Directed Acyclic Graph dependencies
+- **LoopUntil** - Loop with exit condition
+- **AllowFailure** - Optional task execution
+- **Template** - Reusable task templates
+- **WorkingDirectory** - File workspace management
+
+### Utility and System Plugins
+- **Debug.Return** - Output debugging information
+- **Log** - Structured logging
+- **Sleep** - Delays and waiting
+- **Pause** - Manual approval gates
+- **State.Set/Get/Delete** - State management
+- **Execution.Count/Fail/Exit/Labels/Resume** - Execution control
+- **Output.Values** - Output management
+- **Metric.Publish** - Custom metrics
+
+### Storage and File Plugins
+- **Storage.Delete/Download/Upload** - File operations
+- **Namespace.Files** - Namespace file management
+
+### HTTP and API Plugins
+- **HTTP.Request** - HTTP API calls
+- **HTTP.Download** - File downloads
+
+### Key-Value Store Plugins
+- **KV.Set/Get/Delete/GetKeys** - Key-value operations
+
+### Trigger Plugins
+- **Schedule** - Cron-based scheduling
+- **ScheduleOnDates** - Specific date scheduling
+- **Flow** - Workflow triggers
+- **Webhook** - HTTP webhook triggers
+- **Toggle** - Enable/disable triggers
+
+### Runner and Script Plugins
+- **Runner.Process** - External process execution
+- **Script execution** - Python, Node.js, Shell, R, etc.
+
+## External Plugin Ecosystem (80+ Repositories)
+
+### Cloud Providers
+
+#### AWS Plugin
+```yaml
+- id: aws-s3-upload
+  type: io.kestra.plugin.aws.s3.Upload
+  from: "{{ outputs.data-file.uri }}"
+  bucket: my-bucket
+  key: processed/data.json
+```
+
+#### Google Cloud Plugin
+```yaml
+- id: bigquery-query
+  type: io.kestra.plugin.gcp.bigquery.Query
+  sql: |
+    SELECT COUNT(*) as total 
+    FROM `project.dataset.table`
+    WHERE date >= '2023-01-01'
+```
+
+#### Azure Plugin
+```yaml
+- id: azure-blob-upload
+  type: io.kestra.plugin.azure.storage.blob.Upload
+  from: "{{ outputs.processed-data.uri }}"
+  container: data-container
+  blob: output/result.json
+```
+
+### Database Integrations
+
+#### JDBC Plugin (Multiple Databases)
+```yaml
+- id: postgres-query
+  type: io.kestra.plugin.jdbc.postgresql.Query
+  url: jdbc:postgresql://localhost:5432/mydb
+  username: user
+  password: "{{ secret('DB_PASSWORD') }}"
+  sql: |
+    SELECT id, name, created_at 
+    FROM users 
+    WHERE active = true
+```
+
+#### MongoDB Plugin
+```yaml
+- id: mongo-find
+  type: io.kestra.plugin.mongodb.Find
+  connection:
+    uri: "{{ secret('MONGO_URI') }}"
+  database: myapp
+  collection: users
+  filter: |
+    {"status": "active"}
+```
+
+#### Elasticsearch Plugin
+```yaml
+- id: elastic-search
+  type: io.kestra.plugin.elasticsearch.Search
+  connection:
+    hosts: ["http://localhost:9200"]
+  indices: ["logs-*"]
+  query: |
+    {
+      "query": {
+        "range": {
+          "@timestamp": {
+            "gte": "now-1h"
+          }
+        }
+      }
+    }
+```
+
+### Message Queue Systems
+
+#### Kafka Plugin
+```yaml
+- id: kafka-produce
+  type: io.kestra.plugin.kafka.Produce
+  properties:
+    bootstrap.servers: localhost:9092
+  topic: data-events
+  from: "{{ outputs.transformed-data.uri }}"
+```
+
+#### NATS Plugin
+```yaml
+- id: nats-publish
+  type: io.kestra.plugin.nats.Publish
+  url: nats://localhost:4222
+  subject: notifications
+  data: |
+    {"event": "workflow_completed", "timestamp": "{{ now() }}"}
+```
+
+#### AMQP/RabbitMQ Plugin
+```yaml
+- id: amqp-publish
+  type: io.kestra.plugin.amqp.Publish
+  url: amqp://localhost:5672
+  exchange: data-exchange
+  routingKey: processed
+  body: "{{ outputs.result }}"
+```
+
+### Data Processing and Analytics
+
+#### DBT Plugin
+```yaml
+- id: dbt-run
+  type: io.kestra.plugin.dbt.cli.DbtCLI
+  runner: DOCKER
+  docker:
+    image: ghcr.io/dbt-labs/dbt-core:latest
+  commands:
+    - dbt deps
+    - dbt run --models my_model
+```
+
+#### Spark Plugin
+```yaml
+- id: spark-submit
+  type: io.kestra.plugin.spark.SparkSubmit
+  applicationFile: s3://my-bucket/spark-app.jar
+  mainClass: com.example.DataProcessor
+  conf:
+    spark.executor.memory: "2g"
+    spark.driver.memory: "1g"
+```
+
+#### Databricks Plugin
+```yaml
+- id: databricks-job
+  type: io.kestra.plugin.databricks.jobs.CreateJobRun
+  host: "{{ secret('DATABRICKS_HOST') }}"
+  token: "{{ secret('DATABRICKS_TOKEN') }}"
+  existingClusterId: "cluster-123"
+  notebookTask:
+    notebookPath: /Workspace/notebooks/data_analysis
+```
+
+### DevOps and Infrastructure
+
+#### Kubernetes Plugin
+```yaml
+- id: k8s-job
+  type: io.kestra.plugin.kubernetes.Job
+  namespace: default
+  spec:
+    template:
+      spec:
+        containers:
+        - name: data-processor
+          image: my-app:latest
+          env:
+          - name: INPUT_FILE
+            value: "{{ inputs.file_path }}"
+```
+
+#### Docker Plugin
+```yaml
+- id: docker-run
+  type: io.kestra.plugin.docker.Run
+  image: python:3.9
+  commands:
+    - python
+    - -c
+    - |
+      import pandas as pd
+      df = pd.read_csv('{{ inputs.csv_file }}')
+      print(f"Processed {len(df)} rows")
+```
+
+#### Terraform Plugin
+```yaml
+- id: terraform-apply
+  type: io.kestra.plugin.terraform.cli.TerraformCLI
+  commands:
+    - terraform init
+    - terraform plan -out=tfplan
+    - terraform apply tfplan
+  env:
+    TF_VAR_environment: "{{ inputs.environment }}"
+```
+
+#### Git Plugin
+```yaml
+- id: git-clone
+  type: io.kestra.plugin.git.Clone
+  url: https://github.com/myorg/my-repo.git
+  branch: main
+  username: "{{ secret('GIT_USERNAME') }}"
+  password: "{{ secret('GIT_TOKEN') }}"
+```
+
+### AI and Machine Learning
+
+#### OpenAI Plugin
+```yaml
+- id: openai-completion
+  type: io.kestra.plugin.openai.ChatCompletion
+  apiKey: "{{ secret('OPENAI_API_KEY') }}"
+  model: gpt-4
+  messages:
+    - role: user
+      content: "Analyze this data: {{ outputs.csv-data.uri }}"
+```
+
+#### LangChain4J Plugin
+```yaml
+- id: langchain-chat
+  type: io.kestra.plugin.langchain4j.ChatMemory
+  modelName: gpt-3.5-turbo
+  maxTokens: 1000
+  systemMessage: "You are a data analysis assistant"
+  userMessage: "Summarize the trends in this dataset"
+```
+
+### File Systems and Storage
+
+#### FS Plugin (FTP/SFTP/HTTP)
+```yaml
+- id: sftp-download
+  type: io.kestra.plugin.fs.sftp.Download
+  host: sftp.example.com
+  username: "{{ secret('SFTP_USER') }}"
+  password: "{{ secret('SFTP_PASS') }}"
+  from: /remote/data/file.csv
+```
+
+#### MinIO Plugin
+```yaml
+- id: minio-upload
+  type: io.kestra.plugin.minio.Upload
+  endpoint: http://localhost:9000
+  accessKeyId: "{{ secret('MINIO_ACCESS_KEY') }}"
+  secretKeyId: "{{ secret('MINIO_SECRET_KEY') }}"
+  bucket: data-lake
+  key: processed/{{ execution.startDate | date('yyyy/MM/dd') }}/data.json
+```
+
+### Notifications and Communication
+
+#### Slack Plugin (notifications)
+```yaml
+- id: slack-notify
+  type: io.kestra.plugin.notifications.slack.SlackExecution
+  url: "{{ secret('SLACK_WEBHOOK') }}"
+  channel: "#data-alerts"
+  username: Kestra
+  customMessage: |
+    Workflow {{ flow.id }} completed successfully!
+    Duration: {{ duration }}
+```
+
+#### Email Plugin (notifications)
+```yaml
+- id: email-alert
+  type: io.kestra.plugin.notifications.mail.MailExecution
+  host: smtp.gmail.com
+  port: 587
+  username: "{{ secret('EMAIL_USER') }}"
+  password: "{{ secret('EMAIL_PASS') }}"
+  to: 
+    - admin@company.com
+  subject: "Workflow Alert: {{ flow.id }}"
+```
+
+### Productivity and Project Management
+
+#### Jira Plugin
+```yaml
+- id: create-jira-ticket
+  type: io.kestra.plugin.jira.issues.CreateIssue
+  url: "{{ secret('JIRA_URL') }}"
+  username: "{{ secret('JIRA_USER') }}"
+  password: "{{ secret('JIRA_TOKEN') }}"
+  projectKey: DATA
+  issueType: Task
+  summary: "Data processing workflow failed"
+  description: "Workflow {{ flow.id }} failed at {{ now() }}"
+```
+
+#### GitHub Plugin
+```yaml
+- id: create-github-issue
+  type: io.kestra.plugin.github.issues.Create
+  token: "{{ secret('GITHUB_TOKEN') }}"
+  repository: myorg/data-pipeline
+  title: "Automated issue from workflow"
+  body: |
+    Workflow execution failed:
+    - Flow: {{ flow.id }}
+    - Execution: {{ execution.id }}
+    - Error: {{ outputs.error-details }}
+```
+
+### Scripts and Languages
+
+#### Scripts Plugin
+```yaml
+- id: python-script
+  type: io.kestra.plugin.scripts.python.Script
+  script: |
+    import pandas as pd
+    import requests
+    
+    # Fetch data from API
+    response = requests.get('{{ inputs.api_url }}')
+    data = response.json()
+    
+    # Process with pandas
+    df = pd.DataFrame(data)
+    result = df.groupby('category').sum()
+    
+    print(f"Processed {len(df)} records")
+    print(result.to_json())
+```
+
+### Data Serialization and Transformation
+
+#### Serdes Plugin
+```yaml
+- id: csv-to-json
+  type: io.kestra.plugin.serdes.csv.CsvToIon
+  from: "{{ inputs.csv_file }}"
+  
+- id: ion-to-json
+  type: io.kestra.plugin.serdes.json.IonToJson
+  from: "{{ outputs.csv-to-json.uri }}"
+```
+
+### Compression and Archives
+
+#### Compress Plugin
+```yaml
+- id: compress-files
+  type: io.kestra.plugin.compress.ArchiveCompress
+  algorithm: ZIP
+  from:
+    - "{{ outputs.report1.uri }}"
+    - "{{ outputs.report2.uri }}"
+  to: reports-{{ execution.startDate | date('yyyy-MM-dd') }}.zip
+```
+
+### Security and Authentication
+
+#### Crypto Plugin
+```yaml
+- id: pgp-encrypt
+  type: io.kestra.plugin.crypto.pgp.Encrypt
+  from: "{{ outputs.sensitive-data.uri }}"
+  publicKeyring: "{{ secret('PGP_PUBLIC_KEY') }}"
+  armor: true
+```
+
+## Integration Patterns
+
+### ETL Pipeline Example
+```yaml
+id: comprehensive-etl
+namespace: data.pipeline
+
+tasks:
+  # Extract from multiple sources
+  - id: extract-postgres
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    sql: SELECT * FROM sales WHERE date >= '{{ inputs.start_date }}'
+    
+  - id: extract-mongodb
+    type: io.kestra.plugin.mongodb.Find
+    database: analytics
+    collection: events
+    
+  # Transform data
+  - id: transform-data
+    type: io.kestra.plugin.scripts.python.Script
+    script: |
+      import pandas as pd
+      
+      # Combine and transform data
+      sales_df = pd.read_json('{{ outputs.extract-postgres.uri }}')
+      events_df = pd.read_json('{{ outputs.extract-mongodb.uri }}')
+      
+      # Data processing logic here
+      result = sales_df.merge(events_df, on='customer_id')
+      result.to_json('output.json')
+      
+  # Load to multiple destinations
+  - id: load-to-bigquery
+    type: io.kestra.plugin.gcp.bigquery.Load
+    from: "{{ outputs.transform-data.outputFiles['output.json'] }}"
+    destinationTable: project.dataset.processed_data
+    
+  - id: load-to-s3
+    type: io.kestra.plugin.aws.s3.Upload
+    from: "{{ outputs.transform-data.outputFiles['output.json'] }}"
+    bucket: data-lake
+    key: processed/{{ execution.startDate | date('yyyy/MM/dd') }}/data.json
+    
+  # Notify completion
+  - id: notify-completion
+    type: io.kestra.plugin.notifications.slack.SlackExecution
+    channel: "#data-team"
+    customMessage: "ETL pipeline completed: {{ outputs.transform-data.vars.record_count }} records processed"
+```
+
+### Multi-Cloud Data Pipeline
+```yaml
+id: multi-cloud-pipeline
+namespace: cloud.integration
+
+tasks:
+  # Source: AWS S3
+  - id: download-from-s3
+    type: io.kestra.plugin.aws.s3.Download
+    bucket: source-data
+    key: daily/data.csv
+    
+  # Process with Databricks
+  - id: process-with-databricks
+    type: io.kestra.plugin.databricks.jobs.CreateJobRun
+    notebookTask:
+      notebookPath: /notebooks/data_processor
+      baseParameters:
+        input_file: "{{ outputs.download-from-s3.uri }}"
+        
+  # Store in Google Cloud Storage
+  - id: upload-to-gcs
+    type: io.kestra.plugin.gcp.gcs.Upload
+    from: "{{ outputs.process-with-databricks.outputFiles['result.parquet'] }}"
+    bucket: processed-data
+    blob: processed/{{ execution.startDate | date('yyyy-MM-dd') }}/result.parquet
+    
+  # Update Azure SQL Database
+  - id: update-azure-sql
+    type: io.kestra.plugin.jdbc.mssql.Query
+    url: "{{ secret('AZURE_SQL_CONNECTION') }}"
+    sql: |
+      MERGE target_table AS target
+      USING (SELECT * FROM OPENROWSET(...)) AS source
+      ON target.id = source.id
+      WHEN MATCHED THEN UPDATE SET ...
+      WHEN NOT MATCHED THEN INSERT ...
+```
+
+This comprehensive ecosystem makes Kestra one of the most extensive workflow orchestration platforms, supporting virtually any integration scenario across clouds, databases, message queues, AI/ML platforms, and productivity tools.

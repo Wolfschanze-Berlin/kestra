@@ -1,7 +1,7 @@
 # Kestra Workflow Basics
 
 ## Overview
-Kestra is an event-driven orchestration platform that uses declarative YAML to define workflows. This document covers the fundamental structure and anatomy of Kestra workflows.
+Kestra is an event-driven orchestration platform that uses declarative YAML to define workflows. With 80+ plugin repositories containing hundreds of task types, Kestra supports virtually any integration scenario across clouds, databases, APIs, AI/ML platforms, and more. This document covers the fundamental structure and anatomy of Kestra workflows.
 
 ## Core Workflow Structure
 

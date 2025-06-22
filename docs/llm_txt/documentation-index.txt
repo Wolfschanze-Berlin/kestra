@@ -1,0 +1,132 @@
+# Kestra LLM Documentation Index
+
+Comprehensive documentation of Kestra's workflow orchestration platform and extensive plugin ecosystem for LLM understanding and code generation.
+
+## 📚 Documentation Structure
+
+### Core Workflow Documentation
+- **[workflow-basics.txt](workflow-basics.txt)** - Fundamental workflow structure and anatomy
+- **[inputs-and-expressions.txt](inputs-and-expressions.txt)** - Input types and Pebble expression language
+- **[flow-control-tasks.txt](flow-control-tasks.txt)** - Sequential, parallel, and conditional execution
+- **[utility-tasks.txt](utility-tasks.txt)** - Debug, logging, state, and system management
+- **[triggers-and-listeners.txt](triggers-and-listeners.txt)** - Event-driven execution patterns
+- **[best-practices.txt](best-practices.txt)** - Production guidelines and optimization
+
+### Plugin Ecosystem Documentation
+- **[plugin-ecosystem.txt](plugin-ecosystem.txt)** - Complete overview of 80+ plugin repositories
+- **[plugin-categories.txt](plugin-categories.txt)** - Categorized plugin reference and integration patterns
+- **[advanced-workflow-examples.txt](advanced-workflow-examples.txt)** - Production-ready workflow examples
+
+## 🌐 Kestra Plugin Ecosystem Overview
+
+Kestra features one of the most comprehensive workflow orchestration plugin ecosystems with **80+ plugin repositories** containing hundreds of task types:
+
+### Major Plugin Categories
+
+#### ☁️ Cloud Providers
+- **AWS**: S3, EC2, Lambda, RDS, SQS, SNS, CloudWatch
+- **Google Cloud**: BigQuery, Cloud Storage, Vertex AI, Dataform
+- **Azure**: Blob Storage, SQL Database, Functions, Batch
+
+#### 🗄️ Databases & Storage
+- **JDBC**: Universal connector for MySQL, PostgreSQL, Oracle, SQL Server
+- **NoSQL**: MongoDB, Cassandra, Couchbase, Redis
+- **Search**: Elasticsearch, OpenSearch
+- **Object Storage**: MinIO, S3-compatible systems
+
+#### 📨 Message Queues & Streaming
+- **Apache Kafka**: Distributed streaming platform
+- **Apache Pulsar**: Cloud-native messaging
+- **NATS**: Lightweight messaging system
+- **AMQP/RabbitMQ**: Enterprise messaging
+- **MQTT**: IoT messaging protocol
+
+#### 🔄 Data Processing & Analytics
+- **DBT**: Data transformation and testing
+- **Apache Spark**: Distributed computing
+- **Databricks**: Analytics and ML platform
+- **Airbyte**: Data integration platform
+- **Singer.io**: Open-source data taps and targets
+
+#### 🤖 AI & Machine Learning
+- **OpenAI**: GPT models and ChatCompletion API
+- **LangChain4J**: Java-based LLM applications
+- **Weaviate**: Vector database for AI applications
+
+#### 🚀 DevOps & Infrastructure
+- **Kubernetes**: Container orchestration
+- **Docker**: Container operations
+- **Terraform**: Infrastructure as Code
+- **Ansible**: Configuration management
+- **Git**: Version control operations
+
+#### 📊 Business & Productivity Tools
+- **Slack/Email**: Notifications and alerts
+- **Jira**: Issue tracking and project management
+- **GitHub**: Repository operations and automation
+- **Google Workspace**: Sheets, Drive integration
+- **Zendesk**: Customer support automation
+
+#### 🔐 Security & Utilities
+- **Crypto/PGP**: Encryption and security operations
+- **LDAP**: Directory services
+- **Compress**: File compression and archiving
+- **Serdes**: Data serialization (JSON, CSV, Avro, Parquet)
+
+## 💡 Key Features Documented
+
+### Workflow Capabilities
+- **Event-driven execution** with triggers and listeners
+- **Multi-paradigm flow control** (sequential, parallel, conditional, loops)
+- **Expression language** with Pebble templating
+- **Error handling** and retry mechanisms
+- **State management** and variable passing
+- **Input/output orchestration** with type safety
+
+### Enterprise Features
+- **Multi-cloud orchestration** across AWS, GCP, Azure
+- **Scalable architecture** handling millions of workflows
+- **Version control integration** with GitOps workflows
+- **Advanced scheduling** with cron and event-based triggers
+- **Comprehensive monitoring** and observability
+- **Security** with secrets management and encryption
+
+### Production Patterns
+- **ETL/ELT pipelines** with data quality validation
+- **CI/CD automation** with infrastructure as code
+- **AI/ML workflows** with model training and deployment
+- **Business process automation** with multi-system integration
+- **Real-time data processing** with stream processing
+- **Compliance reporting** and security monitoring
+
+## 🎯 Usage Guidelines
+
+### For LLM Code Generation
+- Use plugin task type documentation for accurate YAML generation
+- Reference workflow examples for complex integration patterns
+- Follow best practices for production-ready workflows
+- Leverage expression language for dynamic behavior
+
+### For Workflow Development
+- Start with workflow-basics.txt for fundamental concepts
+- Use plugin-ecosystem.txt to identify available integrations
+- Reference advanced-workflow-examples.txt for complex patterns
+- Apply best-practices.txt for production deployments
+
+### For Integration Architecture
+- Review plugin-categories.txt for technology stack alignment
+- Use integration patterns for common use cases
+- Consider multi-cloud patterns for enterprise scenarios
+- Plan for security and compliance requirements
+
+## 📈 Workflow Examples Included
+
+1. **Multi-Cloud ETL Pipeline** - AWS → Databricks → GCP BigQuery/Azure SQL
+2. **AI-Powered Customer Analysis** - PostgreSQL → OpenAI → Weaviate → Marketing Automation
+3. **DevOps CI/CD Pipeline** - Git → Docker → Kubernetes → Terraform
+4. **Real-time Data Processing** - Kafka → Stream Processing → Multiple Destinations
+5. **Business Process Automation** - Customer Support → AI Triage → Multi-channel Response
+6. **Data Quality Monitoring** - Soda Checks → Elasticsearch → Incident Management
+7. **Security Compliance** - Log Collection → Threat Analysis → Reporting
+
+This documentation provides comprehensive coverage of Kestra's capabilities, making it suitable for LLM understanding and generating sophisticated workflow automation solutions across any technology stack or business domain.
