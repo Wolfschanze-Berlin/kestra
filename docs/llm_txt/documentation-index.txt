@@ -18,6 +18,13 @@ Comprehensive documentation of Kestra's workflow orchestration platform and exte
 - **[plugin-categories.txt](plugin-categories.txt)** - Categorized plugin reference by use case
 - **[advanced-workflow-examples.txt](advanced-workflow-examples.txt)** - Production-ready workflow examples
 
+### AI Assistant Instructions and Prompts
+- **[ai-assistant-prompt.md](ai-assistant-prompt.md)** - Comprehensive AI assistant prompt with full ecosystem knowledge
+- **[UNIVERSAL_AI_PROMPT.md](UNIVERSAL_AI_PROMPT.md)** - Copy-paste prompt for any AI assistant
+- **[../DEVELOPMENT_INSTRUCTIONS.md](../DEVELOPMENT_INSTRUCTIONS.md)** - Development guidelines and documentation usage
+- **[../GITHUB_INSTRUCTIONS_README.md](../GITHUB_INSTRUCTIONS_README.md)** - GitHub custom instructions overview
+- **[../../.github/copilot-instructions.md](../../.github/copilot-instructions.md)** - GitHub Copilot custom instructions
+
 ## 🌐 Kestra Plugin Ecosystem Overview
 
 Kestra features one of the most comprehensive workflow orchestration plugin ecosystems with **700+ plugins** across 13 official categories:
