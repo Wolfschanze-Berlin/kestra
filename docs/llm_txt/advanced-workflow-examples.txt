@@ -1,0 +1,722 @@
+# Production-Ready Workflow Examples
+
+Complete, real-world workflow examples showcasing Kestra's extensive plugin ecosystem and best practices.
+
+## 1. Multi-Cloud ETL Pipeline
+
+A comprehensive data pipeline that extracts from AWS, processes with Databricks, and loads to multiple destinations.
+
+```yaml
+id: multi-cloud-etl-pipeline
+namespace: data.engineering
+description: "Extract data from AWS S3, process with Databricks, load to GCP BigQuery and Azure SQL"
+
+inputs:
+  - id: processing_date
+    type: DATETIME
+    description: "Date to process (defaults to yesterday)"
+    defaults: "{{ now() | dateAdd(-1, 'DAYS') }}"
+  - id: environment
+    type: STRING
+    description: "Deployment environment"
+    defaults: "production"
+
+variables:
+  source_bucket: "{{ inputs.environment }}-raw-data"
+  target_dataset: "{{ inputs.environment }}_processed"
+
+tasks:
+  # 1. Data Quality Check
+  - id: validate-source-data
+    type: io.kestra.plugin.aws.s3.List
+    accessKeyId: "{{ secret('AWS_ACCESS_KEY') }}"
+    secretKeyId: "{{ secret('AWS_SECRET_KEY') }}"
+    region: us-east-1
+    bucket: "{{ vars.source_bucket }}"
+    prefix: "daily/{{ inputs.processing_date | date('yyyy/MM/dd') }}/"
+    
+  - id: check-file-count
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ outputs['validate-source-data'].objects | size > 0 }}"
+    then:
+      # 2. Extract from AWS S3
+      - id: download-source-files
+        type: io.kestra.plugin.core.flow.ForEach
+        values: "{{ outputs['validate-source-data'].objects }}"
+        tasks:
+          - id: download-file
+            type: io.kestra.plugin.aws.s3.Download
+            accessKeyId: "{{ secret('AWS_ACCESS_KEY') }}"
+            secretKeyId: "{{ secret('AWS_SECRET_KEY') }}"
+            region: us-east-1
+            bucket: "{{ vars.source_bucket }}"
+            key: "{{ taskrun.value.key }}"
+            
+      # 3. Data Processing with Databricks
+      - id: process-with-databricks
+        type: io.kestra.plugin.databricks.jobs.CreateJobRun
+        host: "{{ secret('DATABRICKS_HOST') }}"
+        token: "{{ secret('DATABRICKS_TOKEN') }}"
+        existingClusterId: "{{ secret('DATABRICKS_CLUSTER_ID') }}"
+        notebookTask:
+          notebookPath: "/Workspace/notebooks/data_processor"
+          baseParameters:
+            input_files: "{{ outputs['download-source-files'].taskRunList | map(attribute='outputs.uri') | join(',') }}"
+            processing_date: "{{ inputs.processing_date | date('yyyy-MM-dd') }}"
+            environment: "{{ inputs.environment }}"
+            
+      # 4. Data Quality Validation
+      - id: validate-processed-data
+        type: io.kestra.plugin.scripts.python.Script
+        docker:
+          image: python:3.9-slim
+        pip:
+          - pandas
+          - great-expectations
+        script: |
+          import pandas as pd
+          import great_expectations as ge
+          
+          # Load processed data
+          df = pd.read_parquet('{{ outputs.process-with-databricks.outputFiles["processed_data.parquet"] }}')
+          
+          # Create Great Expectations dataset
+          gdf = ge.from_pandas(df)
+          
+          # Data quality checks
+          gdf.expect_table_row_count_to_be_between(min_value=1000, max_value=1000000)
+          gdf.expect_column_values_to_not_be_null('customer_id')
+          gdf.expect_column_values_to_be_unique('transaction_id')
+          gdf.expect_column_values_to_be_between('amount', min_value=0, max_value=100000)
+          
+          # Validate expectations
+          results = gdf.validate()
+          
+          if not results['success']:
+            raise Exception(f"Data quality validation failed: {results}")
+          
+          print(f"Data quality validation passed for {len(df)} records")
+          
+      # 5. Parallel Load to Multiple Destinations
+      - id: load-to-destinations
+        type: io.kestra.plugin.core.flow.Parallel
+        tasks:
+          # Load to Google BigQuery
+          - id: load-to-bigquery
+            type: io.kestra.plugin.gcp.bigquery.Load
+            serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+            projectId: "{{ secret('GCP_PROJECT_ID') }}"
+            from: "{{ outputs.process-with-databricks.outputFiles['processed_data.parquet'] }}"
+            destinationTable: "{{ vars.target_dataset }}.daily_transactions"
+            format: PARQUET
+            writeDisposition: WRITE_TRUNCATE
+            partitioningField: processing_date
+            partitioningType: DAY
+            
+          # Load to Azure SQL Database
+          - id: load-to-azure-sql
+            type: io.kestra.plugin.jdbc.mssql.Query
+            url: "{{ secret('AZURE_SQL_CONNECTION_STRING') }}"
+            sql: |
+              -- Truncate and load
+              TRUNCATE TABLE staging.daily_transactions;
+              
+              BULK INSERT staging.daily_transactions
+              FROM '{{ outputs.process-with-databricks.outputFiles["processed_data.csv"] }}'
+              WITH (
+                FIELDTERMINATOR = ',',
+                ROWTERMINATOR = '\n',
+                FIRSTROW = 2
+              );
+              
+              -- Merge to production table
+              MERGE production.daily_transactions AS target
+              USING staging.daily_transactions AS source
+              ON target.transaction_id = source.transaction_id
+              WHEN MATCHED THEN 
+                UPDATE SET 
+                  amount = source.amount,
+                  customer_id = source.customer_id,
+                  updated_at = GETDATE()
+              WHEN NOT MATCHED THEN
+                INSERT (transaction_id, amount, customer_id, processing_date, created_at)
+                VALUES (source.transaction_id, source.amount, source.customer_id, 
+                       source.processing_date, GETDATE());
+                       
+          # Archive to S3
+          - id: archive-to-s3
+            type: io.kestra.plugin.aws.s3.Upload
+            accessKeyId: "{{ secret('AWS_ACCESS_KEY') }}"
+            secretKeyId: "{{ secret('AWS_SECRET_KEY') }}"
+            region: us-east-1
+            from: "{{ outputs.process-with-databricks.outputFiles['processed_data.parquet'] }}"
+            bucket: "{{ inputs.environment }}-processed-data"
+            key: "daily/{{ inputs.processing_date | date('yyyy/MM/dd') }}/processed_data.parquet"
+            
+      # 6. Update Data Catalog
+      - id: update-data-catalog
+        type: io.kestra.plugin.core.flow.Parallel
+        tasks:
+          - id: update-bigquery-schema
+            type: io.kestra.plugin.gcp.bigquery.Query
+            serviceAccount: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+            projectId: "{{ secret('GCP_PROJECT_ID') }}"
+            sql: |
+              -- Update table description and labels
+              ALTER TABLE `{{ vars.target_dataset }}.daily_transactions`
+              SET OPTIONS (
+                description = 'Daily transaction data processed on {{ now() | date("yyyy-MM-dd HH:mm:ss") }}',
+                labels = [('environment', '{{ inputs.environment }}'), ('pipeline', 'multi-cloud-etl')]
+              );
+              
+          - id: update-documentation
+            type: io.kestra.plugin.github.contents.CreateOrUpdate
+            token: "{{ secret('GITHUB_TOKEN') }}"
+            repository: "company/data-documentation"
+            path: "datasets/daily_transactions.md"
+            message: "Update daily_transactions documentation - {{ now() | date('yyyy-MM-dd') }}"
+            content: |
+              # Daily Transactions Dataset
+              
+              **Last Updated**: {{ now() | date('yyyy-MM-dd HH:mm:ss') }}
+              **Environment**: {{ inputs.environment }}
+              **Records Processed**: {{ outputs.validate-processed-data.vars.record_count }}
+              
+              ## Schema
+              - transaction_id: Unique transaction identifier
+              - customer_id: Customer identifier
+              - amount: Transaction amount
+              - processing_date: Date of processing
+              
+              ## Data Quality Metrics
+              - Total Records: {{ outputs.validate-processed-data.vars.record_count }}
+              - Validation Status: ✅ Passed
+              - Processing Duration: {{ duration }}
+    else:
+      - id: no-data-notification
+        type: io.kestra.plugin.notifications.slack.SlackExecution
+        url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+        channel: "#data-alerts"
+        customMessage: |
+          ⚠️ No data found for processing date {{ inputs.processing_date | date('yyyy-MM-dd') }}
+          Environment: {{ inputs.environment }}
+          Expected path: s3://{{ vars.source_bucket }}/daily/{{ inputs.processing_date | date('yyyy/MM/dd') }}/
+
+  # Final notification
+  - id: success-notification
+    type: io.kestra.plugin.notifications.slack.SlackExecution
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    channel: "#data-team"
+    customMessage: |
+      ✅ Multi-cloud ETL pipeline completed successfully!
+      
+      **Details:**
+      - Processing Date: {{ inputs.processing_date | date('yyyy-MM-dd') }}
+      - Environment: {{ inputs.environment }}
+      - Records Processed: {{ outputs.validate-processed-data.vars.record_count }}
+      - Duration: {{ duration }}
+      - BigQuery Table: {{ vars.target_dataset }}.daily_transactions
+      
+      **Destinations Updated:**
+      - ✅ Google BigQuery
+      - ✅ Azure SQL Database  
+      - ✅ S3 Archive
+
+triggers:
+  - id: daily-schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *"  # Run daily at 2 AM
+    
+errors:
+  - id: error-notification
+    type: io.kestra.plugin.notifications.slack.SlackExecution
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    channel: "#data-alerts"
+    customMessage: |
+      🚨 Multi-cloud ETL pipeline failed!
+      
+      **Error Details:**
+      - Flow: {{ flow.id }}
+      - Execution: {{ execution.id }}
+      - Processing Date: {{ inputs.processing_date | date('yyyy-MM-dd') }}
+      - Environment: {{ inputs.environment }}
+      - Failed Task: {{ task.id }}
+      - Error: {{ task.value }}
+      
+      **Action Required:** Check logs and retry pipeline.
+
+  - id: create-incident-ticket
+    type: io.kestra.plugin.jira.issues.CreateIssue
+    url: "{{ secret('JIRA_URL') }}"
+    username: "{{ secret('JIRA_USERNAME') }}"
+    password: "{{ secret('JIRA_TOKEN') }}"
+    projectKey: "DATA"
+    issueType: "Incident"
+    summary: "ETL Pipeline Failure - {{ inputs.processing_date | date('yyyy-MM-dd') }}"
+    description: |
+      **Automated incident created by Kestra workflow**
+      
+      **Pipeline**: Multi-cloud ETL Pipeline
+      **Environment**: {{ inputs.environment }}
+      **Processing Date**: {{ inputs.processing_date | date('yyyy-MM-dd') }}
+      **Execution ID**: {{ execution.id }}
+      **Failed Task**: {{ task.id }}
+      
+      **Error Message**: {{ task.value }}
+      
+      **Resolution Steps**:
+      1. Check source data availability in S3
+      2. Validate Databricks cluster status
+      3. Verify destination connectivity
+      4. Review task logs in Kestra UI
+      5. Retry pipeline after fixing issues
+      
+      **Kestra Execution URL**: {{ execution.uri }}
+```
+
+## 2. AI-Powered Customer Analysis Pipeline
+
+A machine learning workflow that analyzes customer data using OpenAI and LangChain.
+
+```yaml
+id: ai-customer-analysis
+namespace: ai.analytics
+description: "AI-powered customer behavior analysis with OpenAI and vector storage"
+
+inputs:
+  - id: analysis_period
+    type: STRING
+    description: "Time period for analysis (7d, 30d, 90d)"
+    defaults: "30d"
+  - id: customer_segment
+    type: STRING
+    description: "Customer segment to analyze"
+    defaults: "premium"
+
+tasks:
+  # 1. Extract Customer Data
+  - id: extract-customer-data
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    url: "{{ secret('POSTGRES_CONNECTION_STRING') }}"
+    sql: |
+      SELECT 
+        c.customer_id,
+        c.email,
+        c.segment,
+        c.registration_date,
+        c.total_orders,
+        c.total_spend,
+        c.last_purchase_date,
+        STRING_AGG(p.product_category, ', ') as purchased_categories,
+        AVG(r.rating) as avg_rating,
+        COUNT(s.support_ticket_id) as support_tickets
+      FROM customers c
+      LEFT JOIN orders o ON c.customer_id = o.customer_id
+      LEFT JOIN order_items oi ON o.order_id = oi.order_id
+      LEFT JOIN products p ON oi.product_id = p.product_id
+      LEFT JOIN reviews r ON c.customer_id = r.customer_id
+      LEFT JOIN support_tickets s ON c.customer_id = s.customer_id
+      WHERE c.segment = '{{ inputs.customer_segment }}'
+        AND c.last_purchase_date >= NOW() - INTERVAL '{{ inputs.analysis_period }}'
+      GROUP BY c.customer_id, c.email, c.segment, c.registration_date, 
+               c.total_orders, c.total_spend, c.last_purchase_date
+      LIMIT 1000;
+
+  # 2. Enrich with Behavioral Data
+  - id: extract-behavioral-data
+    type: io.kestra.plugin.elasticsearch.Search
+    connection:
+      hosts: ["{{ secret('ELASTICSEARCH_HOST') }}"]
+      username: "{{ secret('ELASTICSEARCH_USERNAME') }}"
+      password: "{{ secret('ELASTICSEARCH_PASSWORD') }}"
+    indices: ["user-events-*"]
+    query: |
+      {
+        "query": {
+          "bool": {
+            "must": [
+              {
+                "terms": {
+                  "customer_id": {{ outputs.extract-customer-data.rows | map(attribute='customer_id') | list }}
+                }
+              },
+              {
+                "range": {
+                  "@timestamp": {
+                    "gte": "now-{{ inputs.analysis_period }}"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "aggs": {
+          "by_customer": {
+            "terms": {
+              "field": "customer_id",
+              "size": 1000
+            },
+            "aggs": {
+              "page_views": {
+                "filter": {
+                  "term": {"event_type": "page_view"}
+                }
+              },
+              "cart_additions": {
+                "filter": {
+                  "term": {"event_type": "add_to_cart"}
+                }
+              },
+              "session_duration": {
+                "avg": {
+                  "field": "session_duration_seconds"
+                }
+              }
+            }
+          }
+        }
+      }
+
+  # 3. Combine and Prepare Data for AI Analysis
+  - id: prepare-ai-analysis-data
+    type: io.kestra.plugin.scripts.python.Script
+    docker:
+      image: python:3.9-slim
+    pip:
+      - pandas
+      - numpy
+      - json
+    script: |
+      import pandas as pd
+      import json
+      import numpy as np
+      
+      # Load customer data
+      customer_df = pd.read_json('{{ outputs.extract-customer-data.uri }}')
+      
+      # Load behavioral data
+      with open('{{ outputs.extract-behavioral-data.uri }}', 'r') as f:
+        behavioral_data = json.load(f)
+      
+      # Process behavioral aggregations
+      behavioral_metrics = {}
+      for bucket in behavioral_data['aggregations']['by_customer']['buckets']:
+        customer_id = bucket['key']
+        behavioral_metrics[customer_id] = {
+          'page_views': bucket['page_views']['doc_count'],
+          'cart_additions': bucket['cart_additions']['doc_count'],
+          'avg_session_duration': bucket['session_duration']['value'] or 0
+        }
+      
+      # Merge datasets
+      behavioral_df = pd.DataFrame.from_dict(behavioral_metrics, orient='index')
+      behavioral_df.reset_index(inplace=True)
+      behavioral_df.rename(columns={'index': 'customer_id'}, inplace=True)
+      
+      # Combine customer and behavioral data
+      enriched_df = customer_df.merge(behavioral_df, on='customer_id', how='left')
+      enriched_df.fillna(0, inplace=True)
+      
+      # Calculate engagement score
+      enriched_df['engagement_score'] = (
+        enriched_df['page_views'] * 0.1 +
+        enriched_df['cart_additions'] * 0.3 +
+        enriched_df['total_orders'] * 0.4 +
+        enriched_df['avg_rating'] * 0.2
+      )
+      
+      # Prepare data for AI analysis
+      ai_input_data = []
+      for _, row in enriched_df.iterrows():
+        customer_profile = f"""
+        Customer Profile:
+        - Segment: {row['segment']}
+        - Total Orders: {row['total_orders']}
+        - Total Spend: ${row['total_spend']:.2f}
+        - Average Rating: {row['avg_rating']:.1f}/5
+        - Purchased Categories: {row['purchased_categories']}
+        - Page Views ({{ inputs.analysis_period }}): {row['page_views']}
+        - Cart Additions ({{ inputs.analysis_period }}): {row['cart_additions']}
+        - Support Tickets: {row['support_tickets']}
+        - Engagement Score: {row['engagement_score']:.2f}
+        """
+        ai_input_data.append({
+          'customer_id': row['customer_id'],
+          'email': row['email'],
+          'profile': customer_profile
+        })
+      
+      # Save prepared data
+      with open('ai_input_data.json', 'w') as f:
+        json.dump(ai_input_data, f, indent=2)
+      
+      print(f"Prepared AI analysis data for {len(ai_input_data)} customers")
+
+  # 4. AI Analysis with OpenAI
+  - id: analyze-customers-with-openai
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ outputs.prepare-ai-analysis-data.outputFiles['ai_input_data.json'] | jq('.[0:10]') }}"  # Process first 10 customers
+    tasks:
+      - id: openai-customer-analysis
+        type: io.kestra.plugin.openai.ChatCompletion
+        apiKey: "{{ secret('OPENAI_API_KEY') }}"
+        model: "gpt-4"
+        maxTokens: 1000
+        temperature: 0.3
+        messages:
+          - role: system
+            content: |
+              You are an expert customer analytics consultant. Analyze the customer profile and provide:
+              1. Customer behavior insights
+              2. Churn risk assessment (Low/Medium/High)
+              3. Personalized recommendations
+              4. Next best action
+              5. Lifetime value prediction category (Low/Medium/High)
+              
+              Respond in JSON format with these exact fields:
+              {
+                "insights": "behavioral insights",
+                "churn_risk": "Low/Medium/High",
+                "recommendations": ["rec1", "rec2", "rec3"],
+                "next_best_action": "specific action",
+                "ltv_category": "Low/Medium/High"
+              }
+          - role: user
+            content: "{{ taskrun.value.profile }}"
+
+  # 5. Create Vector Embeddings for Customer Profiles
+  - id: create-customer-embeddings
+    type: io.kestra.plugin.langchain4j.EmbeddingStore
+    modelName: "text-embedding-ada-002"
+    apiKey: "{{ secret('OPENAI_API_KEY') }}"
+    texts: "{{ outputs.prepare-ai-analysis-data.outputFiles['ai_input_data.json'] | jq('.[].profile') }}"
+    
+  # 6. Store Embeddings in Weaviate Vector Database
+  - id: store-in-weaviate
+    type: io.kestra.plugin.weaviate.CreateObjects
+    host: "{{ secret('WEAVIATE_HOST') }}"
+    apiKey: "{{ secret('WEAVIATE_API_KEY') }}"
+    className: "CustomerProfile"
+    objects: |
+      {{ outputs.create-customer-embeddings.embeddings | zip(outputs.prepare-ai-analysis-data.outputFiles['ai_input_data.json']) | 
+         map('{ "vector": .[0], "properties": { "customer_id": .[1].customer_id, "email": .[1].email, "profile": .[1].profile } }') }}
+
+  # 7. Generate Customer Insights Report
+  - id: generate-insights-report
+    type: io.kestra.plugin.scripts.python.Script
+    docker:
+      image: python:3.9-slim
+    pip:
+      - pandas
+      - matplotlib
+      - seaborn
+      - reportlab
+    script: |
+      import pandas as pd
+      import json
+      import matplotlib.pyplot as plt
+      import seaborn as sns
+      from reportlab.lib.pagesizes import letter
+      from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+      from reportlab.lib.styles import getSampleStyleSheet
+      import numpy as np
+      
+      # Load AI analysis results
+      ai_results = []
+      for task_run in {{ outputs.analyze-customers-with-openai.taskRunList }}:
+        if 'choices' in task_run['outputs'] and len(task_run['outputs']['choices']) > 0:
+          content = task_run['outputs']['choices'][0]['message']['content']
+          try:
+            analysis = json.loads(content)
+            analysis['customer_id'] = task_run['value']['customer_id']
+            ai_results.append(analysis)
+          except json.JSONDecodeError:
+            continue
+      
+      # Create analysis DataFrame
+      results_df = pd.DataFrame(ai_results)
+      
+      # Generate visualizations
+      plt.figure(figsize=(15, 10))
+      
+      # Churn risk distribution
+      plt.subplot(2, 3, 1)
+      churn_counts = results_df['churn_risk'].value_counts()
+      plt.pie(churn_counts.values, labels=churn_counts.index, autopct='%1.1f%%')
+      plt.title('Churn Risk Distribution')
+      
+      # LTV category distribution
+      plt.subplot(2, 3, 2)
+      ltv_counts = results_df['ltv_category'].value_counts()
+      plt.pie(ltv_counts.values, labels=ltv_counts.index, autopct='%1.1f%%')
+      plt.title('Lifetime Value Categories')
+      
+      # Top recommendations
+      plt.subplot(2, 3, 3)
+      all_recommendations = []
+      for recs in results_df['recommendations']:
+        all_recommendations.extend(recs)
+      rec_counts = pd.Series(all_recommendations).value_counts().head(10)
+      plt.barh(range(len(rec_counts)), rec_counts.values)
+      plt.yticks(range(len(rec_counts)), rec_counts.index)
+      plt.title('Top 10 Recommendations')
+      
+      plt.tight_layout()
+      plt.savefig('customer_insights_dashboard.png', dpi=300, bbox_inches='tight')
+      
+      # Generate detailed report
+      with open('customer_insights_report.json', 'w') as f:
+        json.dump({
+          'analysis_summary': {
+            'total_customers_analyzed': len(results_df),
+            'high_churn_risk_count': len(results_df[results_df['churn_risk'] == 'High']),
+            'high_ltv_count': len(results_df[results_df['ltv_category'] == 'High']),
+            'analysis_period': '{{ inputs.analysis_period }}',
+            'customer_segment': '{{ inputs.customer_segment }}',
+            'generated_at': '{{ now() | date("yyyy-MM-dd HH:mm:ss") }}'
+          },
+          'detailed_results': ai_results
+        }, f, indent=2)
+      
+      print(f"Generated insights report for {len(results_df)} customers")
+
+  # 8. Update Customer Scores in Database
+  - id: update-customer-scores
+    type: io.kestra.plugin.jdbc.postgresql.Query
+    url: "{{ secret('POSTGRES_CONNECTION_STRING') }}"
+    sql: |
+      {% for result in outputs.generate-insights-report.outputFiles['customer_insights_report.json'] | jq('.detailed_results[]') %}
+      UPDATE customers 
+      SET 
+        churn_risk_score = CASE 
+          WHEN '{{ result.churn_risk }}' = 'High' THEN 3
+          WHEN '{{ result.churn_risk }}' = 'Medium' THEN 2
+          ELSE 1
+        END,
+        ltv_category = '{{ result.ltv_category }}',
+        ai_insights = '{{ result.insights | replace("'", "''") }}',
+        next_recommended_action = '{{ result.next_best_action | replace("'", "''") }}',
+        analysis_updated_at = NOW()
+      WHERE customer_id = '{{ result.customer_id }}';
+      {% endfor %}
+
+  # 9. Create Marketing Campaigns Based on Insights
+  - id: create-targeted-campaigns
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+      # High churn risk customers - retention campaign
+      - id: create-retention-campaign
+        type: io.kestra.plugin.http.Request
+        uri: "{{ secret('MARKETING_PLATFORM_API_URL') }}/campaigns"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ secret('MARKETING_PLATFORM_TOKEN') }}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "name": "AI-Powered Retention Campaign - {{ now() | date('yyyy-MM-dd') }}",
+            "type": "retention",
+            "audience": {
+              "segment": "{{ inputs.customer_segment }}",
+              "churn_risk": "High",
+              "analysis_period": "{{ inputs.analysis_period }}"
+            },
+            "content": {
+              "subject": "We miss you! Special offer inside",
+              "template": "retention_template_v2"
+            },
+            "schedule": {
+              "send_at": "{{ now() | dateAdd(1, 'HOURS') | date('yyyy-MM-dd HH:mm:ss') }}"
+            }
+          }
+          
+      # High LTV customers - VIP program
+      - id: create-vip-campaign
+        type: io.kestra.plugin.http.Request
+        uri: "{{ secret('MARKETING_PLATFORM_API_URL') }}/campaigns"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ secret('MARKETING_PLATFORM_TOKEN') }}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "name": "AI-Identified VIP Customers - {{ now() | date('yyyy-MM-dd') }}",
+            "type": "vip_upgrade",
+            "audience": {
+              "segment": "{{ inputs.customer_segment }}",
+              "ltv_category": "High",
+              "analysis_period": "{{ inputs.analysis_period }}"
+            },
+            "content": {
+              "subject": "Exclusive VIP invitation - You're special!",
+              "template": "vip_invitation_template"
+            },
+            "schedule": {
+              "send_at": "{{ now() | dateAdd(2, 'HOURS') | date('yyyy-MM-dd HH:mm:ss') }}"
+            }
+          }
+
+  # 10. Final Reporting and Notifications
+  - id: send-analysis-report
+    type: io.kestra.plugin.notifications.mail.MailExecution
+    host: "{{ secret('SMTP_HOST') }}"
+    port: 587
+    username: "{{ secret('SMTP_USERNAME') }}"
+    password: "{{ secret('SMTP_PASSWORD') }}"
+    to:
+      - "marketing-team@company.com"
+      - "data-team@company.com"
+    subject: "AI Customer Analysis Report - {{ inputs.customer_segment }} - {{ now() | date('yyyy-MM-dd') }}"
+    htmlTextContent: |
+      <h2>AI-Powered Customer Analysis Report</h2>
+      
+      <h3>Analysis Summary</h3>
+      <ul>
+        <li><strong>Segment Analyzed:</strong> {{ inputs.customer_segment }}</li>
+        <li><strong>Time Period:</strong> {{ inputs.analysis_period }}</li>
+        <li><strong>Customers Analyzed:</strong> {{ outputs.generate-insights-report.vars.total_customers }}</li>
+        <li><strong>High Churn Risk:</strong> {{ outputs.generate-insights-report.vars.high_churn_count }}</li>
+        <li><strong>High LTV Potential:</strong> {{ outputs.generate-insights-report.vars.high_ltv_count }}</li>
+      </ul>
+      
+      <h3>Actions Taken</h3>
+      <ul>
+        <li>✅ Customer profiles embedded in vector database</li>
+        <li>✅ Churn risk scores updated in customer database</li>
+        <li>✅ Retention campaign created for high-risk customers</li>
+        <li>✅ VIP campaign created for high-value customers</li>
+      </ul>
+      
+      <p><strong>Dashboard:</strong> <a href="{{ secret('BI_DASHBOARD_URL') }}/customer-analysis">View detailed dashboard</a></p>
+      <p><strong>Kestra Execution:</strong> <a href="{{ execution.uri }}">View workflow execution</a></p>
+    attachments:
+      - "{{ outputs.generate-insights-report.outputFiles['customer_insights_dashboard.png'] }}"
+      - "{{ outputs.generate-insights-report.outputFiles['customer_insights_report.json'] }}"
+
+triggers:
+  - id: weekly-analysis
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 9 * * 1"  # Run every Monday at 9 AM
+    inputs:
+      analysis_period: "7d"
+      customer_segment: "premium"
+
+errors:
+  - id: ai-analysis-error-alert
+    type: io.kestra.plugin.notifications.slack.SlackExecution
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    channel: "#ai-analytics"
+    customMessage: |
+      🤖❌ AI Customer Analysis Pipeline Failed
+      
+      **Details:**
+      - Segment: {{ inputs.customer_segment }}
+      - Period: {{ inputs.analysis_period }}
+      - Failed Task: {{ task.id }}
+      - Error: {{ task.value }}
+      - Execution: {{ execution.id }}
+      
+      **Action Required:** Review logs and investigate AI model performance.
+```
+
+These examples demonstrate how Kestra's extensive plugin ecosystem enables sophisticated, production-ready workflows that integrate multiple clouds, AI/ML platforms, databases, and business tools in a single, maintainable YAML definition.

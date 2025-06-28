@@ -1,0 +1,132 @@
+# .github/COPILOT_INSTRUCTIONS
+
+## Repository Context
+This is the Kestra open-source orchestration platform repository. Kestra is a declarative workflow orchestration tool with 700+ plugins for automating complex data, AI, and DevOps workflows using YAML configuration.
+
+## Key Documentation References
+- `docs/llm_txt/` - Comprehensive workflow documentation for LLM assistance
+- `docs/workflows/` - Production-ready workflow examples with mermaid diagrams
+- `docs/component-dependencies.md` - System architecture overview
+
+## Workflow Development Guidelines
+
+### Standard YAML Structure
+```yaml
+id: workflow-name
+namespace: organization.team
+description: "Clear workflow description"
+
+inputs:
+  - id: parameter_name
+    type: STRING  # STRING, INT, FLOAT, BOOLEAN, JSON, DATETIME, FILE, SECRET
+    description: "Parameter description"
+    defaults: "default_value"
+
+labels:
+  environment: "production"
+  team: "team-name"
+
+tasks:
+  - id: task-name
+    type: io.kestra.plugin.core.debug.Return
+    format: "{{inputs.parameter_name}}"
+
+triggers:
+  - id: schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *"
+
+errors:
+  - id: error-handler
+    type: io.kestra.plugin.core.log.Log
+    message: "Workflow failed: {{error.message}}"
+    level: ERROR
+```
+
+### Essential Plugin Categories
+- **Flow Control**: Sequential, Parallel, ForEach, If, Switch, Subflow
+- **Cloud**: AWS (S3, Lambda), GCP (BigQuery, Storage), Azure (Blob, Functions)
+- **Database**: JDBC (PostgreSQL, MySQL), MongoDB, Elasticsearch, Redis
+- **AI/ML**: OpenAI, LangChain4J, Weaviate
+- **DevOps**: Kubernetes, Docker, Terraform, Git
+- **Data Processing**: DBT, Spark, Databricks, Airbyte
+- **Messaging**: Kafka, Pulsar, NATS, AMQP
+
+### Expression Language (Pebble)
+```yaml
+# Input access
+"{{inputs.parameter_name}}"
+
+# Output access
+"{{outputs.task_id.property}}"
+
+# Conditional logic
+"{{inputs.environment == 'production'}}"
+
+# Date operations
+"{{now() | date('yyyy-MM-dd')}}"
+
+# JSON processing
+"{{inputs.config | json_path('$.database.host')}}"
+
+# Default values
+"{{inputs.optional_param ?? 'default_value'}}"
+```
+
+### Best Practices
+- Use kebab-case for workflow and task IDs
+- Include descriptive namespaces: `organization.team.domain`
+- Always add input descriptions and types
+- Implement retry logic for external operations
+- Use `{{secret('KEY')}}` for sensitive data
+- Include comprehensive error handling
+- Add structured logging with appropriate levels
+
+### Common Patterns
+
+#### ETL Pipeline
+```yaml
+tasks:
+  - id: extract
+    type: io.kestra.plugin.jdbc.postgresql.Query
+  - id: transform
+    type: io.kestra.plugin.scripts.python.Script
+  - id: load
+    type: io.kestra.plugin.aws.s3.Upload
+```
+
+#### API Integration
+```yaml
+- id: api-call
+  type: io.kestra.plugin.core.http.Request
+  uri: "{{inputs.api_url}}"
+  retry:
+    maxAttempt: 3
+    interval: PT30S
+```
+
+#### Conditional Execution
+```yaml
+- id: environment-check
+  type: io.kestra.plugin.core.flow.If
+  condition: "{{inputs.environment == 'production'}}"
+  then:
+    - id: production-tasks
+      type: io.kestra.plugin.core.flow.Sequential
+```
+
+## Code Quality Standards
+- Validate YAML syntax and indentation (2 spaces)
+- Use correct plugin task types and parameters
+- Implement proper error handling and retry logic
+- Follow security best practices for secrets and access control
+- Include meaningful comments and descriptions
+
+## Development Context
+- Platform: Java-based workflow orchestration
+- Configuration: YAML workflow definitions
+- Plugin Ecosystem: 700+ plugins across 13 categories
+- Expression Language: Pebble templating
+- Architecture: Cloud-native, scalable, event-driven
+
+When suggesting code or fixes, prioritize production-ready, maintainable solutions that leverage Kestra's extensive plugin ecosystem and follow documented best practices.

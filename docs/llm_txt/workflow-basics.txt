@@ -1,0 +1,215 @@
+# Kestra Workflow Basics
+
+## Overview
+Kestra is an event-driven orchestration platform that uses declarative YAML to define workflows. With 80+ plugin repositories containing hundreds of task types, Kestra supports virtually any integration scenario across clouds, databases, APIs, AI/ML platforms, and more. This document covers the fundamental structure and anatomy of Kestra workflows.
+
+## Core Workflow Structure
+
+### Basic Workflow Anatomy
+```yaml
+id: workflow-name                    # Unique identifier for the workflow
+namespace: organization.project      # Namespace for organization/grouping
+
+description: "Workflow description"  # Optional: Human-readable description
+
+inputs:                             # Optional: Define input parameters
+  - id: input_name
+    type: STRING|INT|FLOAT|BOOLEAN|JSON|DATETIME|FILE|SECRET
+    description: "Parameter description"
+    defaults: "default_value"        # Optional default value
+
+labels:                             # Optional: Metadata labels
+  environment: "production"
+  team: "data-engineering"
+
+tasks:                              # Required: List of tasks to execute
+  - id: task-name
+    type: task.type.here
+    # task-specific properties
+
+triggers:                           # Optional: Event triggers
+  - id: trigger-name
+    type: trigger.type.here
+    # trigger-specific properties
+
+listeners:                          # Optional: Event listeners
+  - conditions:
+      - type: condition.type.here
+    tasks:
+      - id: listener-task
+        type: task.type.here
+
+errors:                            # Optional: Global error handling
+  - id: error-handler
+    type: task.type.here
+
+pluginDefaults:                    # Optional: Default plugin configurations
+  - type: plugin.type.here
+    values:
+      property: "value"
+```
+
+## Essential Workflow Components
+
+### 1. Workflow Identity and Organization
+```yaml
+id: data-processing-pipeline        # Unique identifier within namespace
+namespace: data.engineering         # Hierarchical organization structure
+description: "Process daily data uploads and generate reports"
+
+labels:                            # Metadata for filtering and organization
+  environment: "production"
+  team: "data-engineering" 
+  version: "1.2.0"
+  criticality: "high"
+```
+
+### 2. Input Definition and Validation
+```yaml
+inputs:
+  - id: source_file
+    type: FILE
+    description: "Source data file to process"
+  - id: batch_size
+    type: INT
+    description: "Number of records to process in each batch"
+    defaults: 1000
+  - id: environment
+    type: STRING
+    description: "Target environment for processing"
+    defaults: "dev"
+  - id: notification_email
+    type: STRING
+    description: "Email for completion notifications"
+```
+
+### 3. Task Structure and Dependencies
+Tasks form the core execution units of workflows. They can be:
+- **Simple tasks**: Single operations (debug, log, etc.)
+- **Flow control tasks**: Manage execution flow (sequential, parallel, if, switch)
+- **Compound tasks**: Contain other tasks (subflows, templates)
+
+```yaml
+tasks:
+  - id: validate-inputs
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{inputs.source_file != null}}"
+    then:
+      - id: process-file
+        type: io.kestra.plugin.core.debug.Return
+        format: "Processing {{inputs.source_file}}"
+    else:
+      - id: fail-validation
+        type: io.kestra.plugin.core.execution.Fail
+        message: "Source file is required"
+```
+
+## Workflow Execution Lifecycle
+
+### 1. **Initialization Phase**
+- Workflow is triggered by schedule, webhook, or manual execution
+- Input parameters are validated and defaults applied
+- Task dependency graph is constructed
+
+### 2. **Execution Phase**
+- Tasks execute according to their dependencies and flow control
+- Variables and outputs are passed between tasks
+- State is managed and persisted
+
+### 3. **Completion Phase**
+- Final outputs are captured
+- Cleanup tasks execute if defined
+- Execution status is recorded
+
+### 4. **Monitoring and Observability**
+- Logs are collected from all task executions
+- Metrics are recorded for performance analysis
+- Alerts are triggered based on success/failure conditions
+
+## Critical Design Patterns
+
+### 1. **Idempotent Workflows**
+Design workflows to be safely re-runnable:
+```yaml
+tasks:
+  - id: check-existing-data
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{outputs.data_exists != true}}"
+    then:
+      - id: process-data
+        type: io.kestra.plugin.core.debug.Return
+        format: "Processing new data"
+```
+
+### 2. **Circuit Breaker Pattern**
+Prevent cascading failures with timeout and retry logic:
+```yaml
+tasks:
+  - id: external-api-call
+    type: io.kestra.plugin.core.flow.AllowFailure
+    timeout: 30s
+    retry:
+      type: constant
+      maxAttempt: 3
+      delayMs: 1000
+    tasks:
+      - id: api-request
+        type: io.kestra.plugin.core.debug.Return
+        format: "Making API call"
+```
+
+### 3. **Graceful Degradation**
+Handle partial failures while maintaining core functionality:
+```yaml
+tasks:
+  - id: primary-processing
+    type: io.kestra.plugin.core.flow.AllowFailure
+    tasks:
+      - id: complex-analysis
+        type: io.kestra.plugin.core.debug.Return
+        format: "Complex analysis"
+  - id: fallback-processing
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{outputs.primary_processing.taskRunId == null}}"
+    then:
+      - id: simple-analysis
+        type: io.kestra.plugin.core.debug.Return
+        format: "Simple fallback analysis"
+```
+
+## Security and Secrets Management
+
+### 1. **Secret Handling**
+```yaml
+inputs:
+  - id: api_key
+    type: SECRET
+    description: "API key for external service"
+
+tasks:
+  - id: secure-api-call
+    type: io.kestra.plugin.core.debug.Return
+    format: "Using API key: {{inputs.api_key}}"  # Automatically masked in logs
+```
+
+### 2. **Namespace Security**
+- Use namespaces to isolate workflows by team/environment
+- Apply appropriate access controls at namespace level
+- Keep sensitive workflows in restricted namespaces
+
+## Performance Optimization Guidelines
+
+### 1. **Minimize Task Overhead**
+- Combine simple operations into single tasks when possible
+- Use batch processing for large datasets
+- Avoid excessive task nesting
+
+### 2. **Optimize Parallel Execution**
+- Use `Parallel` tasks for independent operations
+- Consider resource constraints when setting parallelism
+- Balance between throughput and resource usage
+
+### 3. **Resource-Aware Scheduling**
+- Set appropriate timeouts for long-running tasks
+- Use task requirements for resource allocation
+- Monitor and tune based on execution metrics

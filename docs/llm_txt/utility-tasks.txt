@@ -1,0 +1,370 @@
+# Kestra Utility and System Tasks
+
+Utility tasks provide essential functionality for workflow operations, debugging, monitoring, and system management.
+
+## Debug and Development Tasks
+
+### Debug Return
+Output values for debugging and testing workflows.
+
+```yaml
+- id: debug-output
+  type: io.kestra.plugin.core.debug.Return
+  format: "Task completed at {{taskrun.startDate}}"
+```
+
+### Debug Echo (Deprecated)
+Legacy debugging task, use Debug Return instead.
+
+```yaml
+- id: debug-echo
+  type: io.kestra.plugin.core.debug.Echo
+  format: "{{ task.id }} > {{ taskrun.startDate }}"
+  level: WARN                              # Optional: DEBUG, INFO, WARN, ERROR
+```
+
+## Logging Tasks
+
+### Log Message
+Write structured log messages at different levels.
+
+```yaml
+- id: log-message
+  type: io.kestra.plugin.core.log.Log
+  message: "Processing item: {{taskrun.value}}"
+  level: INFO                                 # DEBUG, INFO, WARN, ERROR
+```
+
+### Log Fetch
+Retrieve logs from previous executions.
+
+```yaml
+- id: fetch-logs
+  type: io.kestra.plugin.core.log.Fetch
+  executionId: "{{inputs.target_execution_id}}"  # Optional: specific execution
+  taskId: "task-name"                         # Optional: specific task
+  level: ERROR                                # Optional: filter by log level
+```
+
+### Log Purge
+Clean up old logs based on criteria.
+
+```yaml
+- id: purge-old-logs
+  type: io.kestra.plugin.core.log.PurgeLogs
+  endDate: "{{now() | dateAdd(-30, 'DAYS')}}"  # Purge logs older than 30 days
+  # Optional filters:
+  namespaces: ["namespace1", "namespace2"]
+  flows: ["flow1", "flow2"]
+```
+
+## Time and Flow Control
+
+### Sleep/Delay
+Pause workflow execution for a specified duration.
+
+```yaml
+- id: wait-task
+  type: io.kestra.plugin.core.flow.Sleep
+  duration: "PT30S"                          # ISO 8601 duration format
+```
+
+### Pause (Manual Resume)
+Pause workflow and wait for manual intervention.
+
+```yaml
+- id: manual-approval
+  type: io.kestra.plugin.core.flow.Pause
+  timeout: "PT1H"                           # Optional timeout
+  onTimeout:
+    - id: timeout-handler
+      type: io.kestra.plugin.core.debug.Return
+      format: "Approval timed out"
+```
+
+## Error Handling Tasks
+
+### Execution Fail
+Force workflow failure with custom message.
+
+```yaml
+- id: force-failure
+  type: io.kestra.plugin.core.execution.Fail
+  message: "Workflow failed due to business logic"
+```
+
+### Allow Failure
+Execute tasks that are allowed to fail without stopping workflow.
+
+```yaml
+- id: optional-task
+  type: io.kestra.plugin.core.flow.AllowFailure
+  tasks:
+    - id: might-fail
+      type: io.kestra.plugin.core.execution.Fail
+      message: "This failure is allowed"
+```
+
+### Assert Conditions
+Validate conditions and fail if assertions don't pass.
+
+```yaml
+- id: data-validation
+  type: io.kestra.plugin.core.execution.Assert
+  conditions:
+    - "{{ inputs.param == 'expected_value' }}"
+    - "{{ outputs.previous_task.count > 0 }}"
+  errorMessage: "Data validation failed"
+```
+
+### Exit Task
+Terminate workflow execution early.
+
+```yaml
+- id: early-exit
+  type: io.kestra.plugin.core.execution.Exit
+  message: "Stopping workflow early due to condition"
+```
+
+## Execution Management
+
+### Execution Count
+Count workflow executions matching criteria.
+
+```yaml
+- id: check-execution-count
+  type: io.kestra.plugin.core.execution.Count
+  flows:
+    - namespace: company.team
+      flowId: critical-workflow
+  startDate: "{{ now() | dateAdd(-1, 'DAYS') }}"
+  expression: "{{ count == 0 }}"              # Alert if no executions in 24h
+```
+
+### Resume Execution
+Resume a paused execution.
+
+```yaml
+- id: resume-paused-execution
+  type: io.kestra.plugin.core.execution.Resume
+  executionId: "{{inputs.execution_to_resume}}"
+```
+
+### Purge Executions
+Clean up old execution records.
+
+```yaml
+- id: cleanup-old-executions
+  type: io.kestra.plugin.core.execution.PurgeExecutions
+  endDate: "{{now() | dateAdd(-90, 'DAYS')}}"
+  states: [SUCCESS, FAILED]                   # Optional: specific states
+```
+
+### Update Execution Labels
+Add or update labels on the current execution.
+
+```yaml
+- id: tag-execution
+  type: io.kestra.plugin.core.execution.Labels
+  labels:
+    environment: "production"
+    processed_date: "{{now()}}"
+```
+
+## Templating Tasks
+
+### Templated Task
+Generate dynamic tasks using templating.
+
+```yaml
+- id: templated-task
+  type: io.kestra.plugin.core.templating.TemplatedTask
+  spec: |
+    id: dynamic-task-{{inputs.suffix}}
+    type: io.kestra.plugin.core.debug.Return
+    format: "Dynamic task: {{inputs.value}}"
+```
+
+## State Management
+
+### Set State
+Store persistent state across workflow executions.
+
+```yaml
+- id: set-state
+  type: io.kestra.plugin.core.state.Set
+  name: "workflow_status"
+  value: "processing"
+```
+
+### Get State
+Retrieve previously stored state.
+
+```yaml
+- id: get-state
+  type: io.kestra.plugin.core.state.Get
+  name: "workflow_status"
+```
+
+### Delete State
+Remove stored state.
+
+```yaml
+- id: cleanup-state
+  type: io.kestra.plugin.core.state.Delete
+  name: "temporary_data"
+```
+
+## Metrics and Monitoring
+
+### Publish Metrics
+Send custom metrics to monitoring systems.
+
+```yaml
+- id: publish-metrics
+  type: io.kestra.plugin.core.metric.Publish
+  metrics:
+    - name: "records_processed"
+      type: "counter"
+      value: "{{outputs.process_data.record_count}}"
+      tags:
+        environment: "production"
+        workflow: "{{flow.id}}"
+    - name: "processing_duration"
+      type: "timer"
+      value: "{{outputs.process_data.duration}}"
+```
+
+## Output Management
+
+### Output Values
+Structure and format workflow outputs.
+
+```yaml
+- id: structured-output
+  type: io.kestra.plugin.core.output.OutputValues
+  outputs:
+    total_records: "{{outputs.count_records.value}}"
+    success_rate: "{{outputs.calculate_rate.percentage}}"
+    processing_time: "{{taskrun.startDate}}"
+    summary:
+      status: "completed"
+      errors: "{{outputs.error_count.value | default(0)}}"
+```
+
+## Working Directory
+
+### Working Directory Context
+Share files between tasks using a common directory.
+
+```yaml
+- id: working-directory
+  type: io.kestra.plugin.core.flow.WorkingDirectory
+  tasks:
+    - id: create-file
+      type: io.kestra.plugin.core.debug.Return
+      format: "File operations in shared directory"
+```
+
+## Advanced Utility Patterns
+
+### Comprehensive Error Handling
+```yaml
+- id: robust-processing
+  type: io.kestra.plugin.core.flow.Sequential
+  tasks:
+    - id: validate-inputs
+      type: io.kestra.plugin.core.execution.Assert
+      conditions:
+        - "{{ inputs.data_file != null }}"
+        - "{{ inputs.environment in ['dev', 'staging', 'production'] }}"
+      errorMessage: "Input validation failed"
+    
+    - id: set-processing-state
+      type: io.kestra.plugin.core.state.Set
+      name: "current_execution"
+      value: "{{execution.id}}"
+    
+    - id: main-processing
+      type: io.kestra.plugin.core.flow.AllowFailure
+      tasks:
+        - id: complex-operation
+          type: io.kestra.plugin.core.debug.Return
+          format: "Complex processing"
+    
+    - id: check-processing-result
+      type: io.kestra.plugin.core.flow.If
+      condition: "{{ outputs.main_processing.taskRunId == null }}"
+      then:
+        - id: log-failure
+          type: io.kestra.plugin.core.log.Log
+          message: "Main processing failed, executing fallback"
+          level: WARN
+        - id: fallback-processing
+          type: io.kestra.plugin.core.debug.Return
+          format: "Fallback processing"
+      else:
+        - id: log-success
+          type: io.kestra.plugin.core.log.Log
+          message: "Main processing completed successfully"
+          level: INFO
+    
+    - id: cleanup-state
+      type: io.kestra.plugin.core.state.Delete
+      name: "current_execution"
+```
+
+### Monitoring and Alerting
+```yaml
+- id: monitoring-workflow
+  type: io.kestra.plugin.core.flow.Sequential
+  tasks:
+    - id: check-system-health
+      type: io.kestra.plugin.core.execution.Count
+      flows:
+        - namespace: production.critical
+          flowId: health-check
+      startDate: "{{ now() | dateAdd(-5, 'MINUTES') }}"
+    
+    - id: alert-if-unhealthy
+      type: io.kestra.plugin.core.flow.If
+      condition: "{{ outputs.check_system_health.count == 0 }}"
+      then:
+        - id: publish-alert-metric
+          type: io.kestra.plugin.core.metric.Publish
+          metrics:
+            - name: "system_health_alert"
+              type: "counter"
+              value: 1
+              tags:
+                severity: "critical"
+                system: "production"
+        - id: log-alert
+          type: io.kestra.plugin.core.log.Log
+          message: "ALERT: No health checks in last 5 minutes"
+          level: ERROR
+```
+
+### Dynamic Workflow Generation
+```yaml
+- id: dynamic-workflow
+  type: io.kestra.plugin.core.flow.ForEach
+  values: "{{ inputs.task_configs }}"
+  tasks:
+    - id: generate-dynamic-task
+      type: io.kestra.plugin.core.templating.TemplatedTask
+      spec: |
+        id: "task-{{ taskrun.value.name }}"
+        type: "{{ taskrun.value.type }}"
+        {{ taskrun.value.properties | toPrettyString }}
+```
+
+## Best Practices for Utility Tasks
+
+1. **Use appropriate log levels**: INFO for normal operations, WARN for issues, ERROR for failures
+2. **Implement state cleanup**: Always clean up temporary state
+3. **Monitor resource usage**: Track metrics for performance optimization
+4. **Use assertions for validation**: Validate inputs and intermediate results
+5. **Implement graceful degradation**: Use AllowFailure for optional operations
+6. **Structure outputs consistently**: Use OutputValues for complex result formatting
+7. **Clean up old data**: Regularly purge logs and executions to manage storage
